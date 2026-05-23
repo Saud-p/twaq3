@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { upcomingMatches } from '../../../lib/matches';
 
+export const dynamic = 'force-static';
+
 export async function GET(request: Request) {
   const key = process.env.API_FOOTBALL_KEY;
   const league = process.env.API_FOOTBALL_LEAGUE_ID;

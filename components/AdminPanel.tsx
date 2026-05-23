@@ -9,7 +9,7 @@ import {
 } from '../lib/storage';
 import type { StoredUser, MatchResult } from '../lib/storage';
 
-const ADMIN_PASS = 'admin1234'; // غيّر هذه كلمة المرور
+const ADMIN_PASS = 'Saud&Fahad=Heart';
 
 export default function AdminPanel() {
   const [authed,  setAuthed]  = useState(false);
