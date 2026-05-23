@@ -46,6 +46,28 @@ export default function AdminPanel() {
     setTimeout(() => setMsg(''), 3000);
   };
 
+  const handleAutoFetch = async () => {
+    setMsg('جاري جلب النتائج من API...');
+    try {
+      const res  = await fetch('/api/fetch-results');
+      const data = await res.json() as { results?: { home: string; away: string; date: string; outcome: MatchOutcome }[]; error?: string };
+      if (data.error) { setMsg(`خطأ: ${data.error}`); return; }
+
+      let count = 0;
+      for (const r of data.results ?? []) {
+        const match = upcomingMatches.find((m) => m.home === r.home && m.away === r.away);
+        if (match) { setMatchResult(match.id, r.outcome); count++; }
+      }
+
+      refresh();
+      setMsg(count > 0 ? `✓ تم جلب ${count} نتيجة وتحديثها` : 'لا توجد نتائج مطابقة للمباريات الحالية');
+      setTimeout(() => setMsg(''), 4000);
+    } catch {
+      setMsg('فشل الاتصال — تحقق من الاتصال بالإنترنت');
+      setTimeout(() => setMsg(''), 4000);
+    }
+  };
+
   if (!authed) {
     return (
       <div className="admin-login">
@@ -146,9 +168,14 @@ export default function AdminPanel() {
             </div>
           );
         })}
-        <button className="btn-primary" style={{ marginTop: 12 }} onClick={handleRecalc}>
-          🧮 احتساب النقاط الآن
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={handleAutoFetch}>
+            🔄 جلب النتائج تلقائياً
+          </button>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={handleRecalc}>
+            🧮 احتساب النقاط
+          </button>
+        </div>
       </div>
 
       {/* ── الأعضاء المعتمدون ── */}
