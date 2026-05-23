@@ -8,7 +8,7 @@ import { Match, MatchOutcome } from '../lib/matches';
 import {
   StoredUser, UserPrediction, MatchResult,
   getLeaderboard, getUserPredictions, saveUserPredictions,
-  getMatchResults,
+  getMatchResults, saveSession, loadSession,
 } from '../lib/storage';
 
 export default function MatchPredictionApp({ initialMatches }: { initialMatches: Match[] }) {
@@ -23,9 +23,18 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
     setResults(getMatchResults());
   };
 
-  useEffect(() => { refreshAll(); }, []);
+  useEffect(() => {
+    refreshAll();
+    // استعادة الجلسة المحفوظة
+    const saved = loadSession();
+    if (saved) {
+      setUser(saved);
+      setPreds(getUserPredictions(saved.id));
+    }
+  }, []);
 
   const handleAuth = (authedUser: StoredUser) => {
+    saveSession(authedUser.id);
     setUser(authedUser);
     setPreds(getUserPredictions(authedUser.id));
     refreshAll();

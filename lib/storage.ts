@@ -24,7 +24,29 @@ export type MatchResult = {
 
 const USERS_KEY   = 'twaq3_users';
 const RESULTS_KEY = 'twaq3_results';
+const SESSION_KEY = 'twaq3_session';
 const predsKey    = (uid: string) => `twaq3_preds_${uid}`;
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+type Session = { userId: string; expiresAt: number };
+
+export function saveSession(userId: string) {
+  save(SESSION_KEY, { userId, expiresAt: Date.now() + ONE_YEAR_MS });
+}
+
+export function loadSession(): StoredUser | null {
+  const session = load<Session | null>(SESSION_KEY, null);
+  if (!session || Date.now() > session.expiresAt) { clearSession(); return null; }
+  const users = getAllUsers();
+  const user  = users.find((u) => u.id === session.userId);
+  if (!user || user.status !== 'approved') { clearSession(); return null; }
+  return user;
+}
+
+export function clearSession() {
+  if (typeof window !== 'undefined') localStorage.removeItem(SESSION_KEY);
+}
 
 function load<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
