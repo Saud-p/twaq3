@@ -5,47 +5,58 @@ import { MatchPrediction } from '../lib/matches';
 interface PredictionPanelProps {
   matches: MatchPrediction[];
   onUpdate: (matches: MatchPrediction[]) => void;
-  onSave: () => void;
+  disabled: boolean;
 }
 
-export default function PredictionPanel({ matches, onUpdate, onSave }: PredictionPanelProps) {
-  const handleScoreChange = (id: string, field: 'homeScore' | 'awayScore', value: string) => {
-    const numeric = value === '' ? null : Number(value);
-    onUpdate(
-      matches.map((match) =>
-        match.id === id ? { ...match, [field]: numeric } : match
-      )
-    );
+export default function PredictionPanel({ matches, onUpdate, disabled }: PredictionPanelProps) {
+  const handleScore = (id: string, field: 'homeScore' | 'awayScore', value: string) => {
+    const num = value === '' ? null : Math.max(0, Math.min(99, parseInt(value) || 0));
+    onUpdate(matches.map((m) => (m.id === id ? { ...m, [field]: num } : m)));
   };
 
+  const isFilled = (m: MatchPrediction) => m.homeScore !== null && m.awayScore !== null;
+
   return (
-    <section className="card">
-      <h2>توقعات المباريات</h2>
-      <div className="matches">
-        {matches.map((match) => (
-          <div key={match.id} className="match-row">
-            <span className="match-date">{match.date}</span>
-            <span>{match.home}</span>
-            <input
-              type="number"
-              min={0}
-              value={match.homeScore ?? ''}
-              onChange={(e) => handleScoreChange(match.id, 'homeScore', e.target.value)}
-              placeholder="-"
-            />
-            <span>vs</span>
-            <input
-              type="number"
-              min={0}
-              value={match.awayScore ?? ''}
-              onChange={(e) => handleScoreChange(match.id, 'awayScore', e.target.value)}
-              placeholder="-"
-            />
-            <span>{match.away}</span>
+    <div className="section">
+      <h2 className="section-title">
+        <span className="icon">⚽</span>
+        توقعات المباريات
+      </h2>
+      <div className="divider" />
+      {matches.map((match) => (
+        <div key={match.id} className={`match-item${isFilled(match) ? ' filled' : ''}`}>
+          <div className="match-teams">
+            <span className="team-name">{match.home}</span>
+            <div className="score-inputs">
+              <input
+                className="score-input"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={99}
+                value={match.homeScore ?? ''}
+                onChange={(e) => handleScore(match.id, 'homeScore', e.target.value)}
+                placeholder="-"
+                disabled={disabled}
+              />
+              <span className="vs-sep">-</span>
+              <input
+                className="score-input"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={99}
+                value={match.awayScore ?? ''}
+                onChange={(e) => handleScore(match.id, 'awayScore', e.target.value)}
+                placeholder="-"
+                disabled={disabled}
+              />
+            </div>
+            <span className="team-name away">{match.away}</span>
           </div>
-        ))}
-      </div>
-      <button className="primary" onClick={onSave}>حفظ التوقعات</button>
-    </section>
+          <div className="match-date">{match.date}</div>
+        </div>
+      ))}
+    </div>
   );
 }

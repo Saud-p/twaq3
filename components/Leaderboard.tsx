@@ -7,24 +7,30 @@ interface LeaderboardProps {
   scores: User[];
 }
 
+const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
 export default function Leaderboard({ user, scores }: LeaderboardProps) {
   return (
-    <section className="card">
-      <h2>أفضل المتوقعين</h2>
-      <div className="leaderboard">
-        <div className="leaderboard-row header">
-          <span>الترتيب</span>
-          <span>رقم الجوال</span>
-          <span>النقاط</span>
-        </div>
-        {scores.map((item) => (
-          <div key={item.id} className={`leaderboard-row ${user?.phone === item.phone ? 'highlight' : ''}`}>
-            <span>{item.rank}</span>
-            <span>{item.phone}</span>
-            <span>{item.points}</span>
-          </div>
-        ))}
+    <div className="section" style={{ marginTop: 10 }}>
+      <h2 className="section-title">
+        <span className="icon">🏆</span>
+        أفضل المتوقعين
+      </h2>
+      <div className="divider" />
+      <div className="lb-row-header">
+        <span></span>
+        <span>الجوال</span>
+        <span style={{ textAlign: 'left' }}>النقاط</span>
       </div>
-    </section>
+      {scores.map((item) => (
+        <div key={item.id} className={`lb-row${user?.phone === item.phone ? ' me' : ''}`}>
+          <div className={`rank-badge rank-${item.rank <= 3 ? item.rank : 'other'}`}>
+            {medals[item.rank] ?? item.rank}
+          </div>
+          <span className="lb-phone">{item.phone}</span>
+          <span className="lb-points">{item.points}</span>
+        </div>
+      ))}
+    </div>
   );
 }
