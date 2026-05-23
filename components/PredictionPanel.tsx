@@ -1,20 +1,24 @@
 'use client';
 
-import { MatchPrediction } from '../lib/matches';
+import { Match, MatchOutcome } from '../lib/matches';
+import { UserPrediction } from '../lib/storage';
 
 interface PredictionPanelProps {
-  matches: MatchPrediction[];
-  onUpdate: (matches: MatchPrediction[]) => void;
+  matches: Match[];
+  predictions: UserPrediction[];
+  onPredict: (matchId: string, prediction: MatchOutcome) => void;
   disabled: boolean;
 }
 
-export default function PredictionPanel({ matches, onUpdate, disabled }: PredictionPanelProps) {
-  const handleScore = (id: string, field: 'homeScore' | 'awayScore', value: string) => {
-    const num = value === '' ? null : Math.max(0, Math.min(99, parseInt(value) || 0));
-    onUpdate(matches.map((m) => (m.id === id ? { ...m, [field]: num } : m)));
-  };
+const OUTCOMES: { key: MatchOutcome; badge: string }[] = [
+  { key: 'home', badge: '1' },
+  { key: 'draw', badge: 'X' },
+  { key: 'away', badge: '2' },
+];
 
-  const isFilled = (m: MatchPrediction) => m.homeScore !== null && m.awayScore !== null;
+export default function PredictionPanel({ matches, predictions, onPredict, disabled }: PredictionPanelProps) {
+  const getPred = (matchId: string) =>
+    predictions.find((p) => p.matchId === matchId)?.prediction ?? null;
 
   return (
     <div className="section">
@@ -23,40 +27,59 @@ export default function PredictionPanel({ matches, onUpdate, disabled }: Predict
         توقعات المباريات
       </h2>
       <div className="divider" />
-      {matches.map((match) => (
-        <div key={match.id} className={`match-item${isFilled(match) ? ' filled' : ''}`}>
-          <div className="match-teams">
-            <span className="team-name">{match.home}</span>
-            <div className="score-inputs">
-              <input
-                className="score-input"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={99}
-                value={match.homeScore ?? ''}
-                onChange={(e) => handleScore(match.id, 'homeScore', e.target.value)}
-                placeholder="-"
-                disabled={disabled}
-              />
-              <span className="vs-sep">-</span>
-              <input
-                className="score-input"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={99}
-                value={match.awayScore ?? ''}
-                onChange={(e) => handleScore(match.id, 'awayScore', e.target.value)}
-                placeholder="-"
-                disabled={disabled}
-              />
+
+      {matches.map((match) => {
+        const selected = getPred(match.id);
+        const hasResult = match.result !== null;
+        const resultLabel =
+          match.result === 'home' ? `فاز ${match.home}` :
+          match.result === 'draw' ? 'تعادل' :
+          match.result === 'away' ? `فاز ${match.away}` : '';
+
+        return (
+          <div key={match.id} className={`match-item${selected ? ' filled' : ''}`}>
+            <div className="match-header">
+              <span className="match-date">{match.date}</span>
+              {hasResult && <span className="result-badge">النتيجة: {resultLabel}</span>}
             </div>
-            <span className="team-name away">{match.away}</span>
+
+            <div className="match-teams-row">
+              <span className="team-name">{match.home}</span>
+              <span className="vs-sep">vs</span>
+              <span className="team-name away">{match.away}</span>
+            </div>
+
+            <div className="prediction-buttons">
+              {OUTCOMES.map(({ key, badge }) => {
+                const isSelected = selected === key;
+                const isCorrect = hasResult && key === match.result;
+                const isWrong = hasResult && isSelected && key !== match.result;
+                const label =
+                  key === 'home' ? match.home :
+                  key === 'draw' ? 'تعادل' : match.away;
+
+                return (
+                  <button
+                    key={key}
+                    className={[
+                      'pred-btn',
+                      `pred-${key}`,
+                      isSelected ? 'selected' : '',
+                      isCorrect ? 'correct' : '',
+                      isWrong ? 'wrong' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => !disabled && !hasResult && onPredict(match.id, key)}
+                    disabled={disabled || hasResult}
+                  >
+                    <span className="pred-badge">{badge}</span>
+                    <span className="pred-label">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="match-date">{match.date}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

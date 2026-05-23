@@ -1,61 +1,77 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import LoginForm from './LoginForm';
 import PredictionPanel from './PredictionPanel';
 import Leaderboard from './Leaderboard';
-import { initialLeaderboard, MatchPrediction, User } from '../lib/matches';
+import { Match, MatchOutcome } from '../lib/matches';
+import {
+  StoredUser, UserPrediction,
+  getLeaderboard, getUserPredictions,
+  saveUserPredictions, addPointsAndSave,
+} from '../lib/storage';
 
 interface MatchPredictionAppProps {
-  initialMatches: MatchPrediction[];
+  initialMatches: Match[];
 }
 
 export default function MatchPredictionApp({ initialMatches }: MatchPredictionAppProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [matches, setMatches] = useState<MatchPrediction[]>(initialMatches);
-  const [leaderboard, setLeaderboard] = useState<User[]>(initialLeaderboard);
+  const [user, setUser] = useState<StoredUser | null>(null);
+  const [predictions, setPredictions] = useState<UserPrediction[]>([]);
+  const [leaderboard, setLeaderboard] = useState<StoredUser[]>([]);
   const [status, setStatus] = useState('');
 
-  const handleLogin = (phone: string) => {
-    const existing = leaderboard.find((item) => item.phone === phone);
-    if (existing) {
-      setUser(existing);
-    } else {
-      const newUser: User = {
-        id: `u${Date.now()}`,
-        phone,
-        rank: leaderboard.length + 1,
-        points: 0,
-      };
-      setLeaderboard((prev) => [...prev, newUser]);
-      setUser(newUser);
-    }
-    setStatus('تم تسجيل الدخول بنجاح ✓');
+  useEffect(() => {
+    setLeaderboard(getLeaderboard());
+  }, []);
+
+  const refreshLeaderboard = () => setLeaderboard(getLeaderboard());
+
+  const handleAuth = (authedUser: StoredUser) => {
+    setUser(authedUser);
+    setPredictions(getUserPredictions(authedUser.id));
+    refreshLeaderboard();
+    setStatus(`أهلاً ${authedUser.phone} 👋`);
+  };
+
+  const handlePredict = (matchId: string, prediction: MatchOutcome) => {
+    setPredictions((prev) => {
+      const rest = prev.filter((p) => p.matchId !== matchId);
+      const existing = prev.find((p) => p.matchId === matchId);
+      return [...rest, { matchId, prediction, scored: existing?.scored ?? false }];
+    });
   };
 
   const handleSave = useCallback(() => {
     if (!user) { setStatus('يرجى تسجيل الدخول أولاً'); return; }
+    if (predictions.length === 0) { setStatus('اختر توقعاتك أولاً'); return; }
 
-    const allFilled = matches.every((m) => m.homeScore !== null && m.awayScore !== null);
-    if (!allFilled) { setStatus('يرجى إدخال نتيجة لكل المباريات'); return; }
+    // احسب النقاط فقط للمباريات التي انتهت ولم تُحتسب بعد
+    let earned = 0;
+    const updated = predictions.map((pred) => {
+      if (pred.scored) return pred;
+      const match = initialMatches.find((m) => m.id === pred.matchId);
+      if (!match?.result) return pred;
+      const correct = pred.prediction === match.result;
+      if (correct) earned++;
+      return { ...pred, scored: true };
+    });
 
-    const gained = matches.reduce((total, m) => {
-      if (m.homeScore === 2 && m.awayScore === 1) return total + 10;
-      if (m.homeScore === m.awayScore) return total + 8;
-      return total + 6;
-    }, 0);
+    saveUserPredictions(user.id, updated);
+    setPredictions(updated);
 
-    const updated = leaderboard.map((item) =>
-      item.phone === user.phone ? { ...item, points: item.points + gained } : item
-    );
-    const sorted = [...updated].sort((a, b) => b.points - a.points);
-    const ranked = sorted.map((item, i) => ({ ...item, rank: i + 1 }));
-    const currentUser = ranked.find((item) => item.phone === user.phone) ?? user;
+    if (earned > 0) {
+      const updatedUser = addPointsAndSave(user.id, earned);
+      setUser(updatedUser);
+      setStatus(`تم الحفظ! حصلت على ${earned} نقطة 🎉`);
+    } else {
+      setStatus('تم حفظ توقعاتك ✓');
+    }
 
-    setLeaderboard(ranked);
-    setUser(currentUser);
-    setStatus(`تم الحفظ! حصلت على ${gained} نقطة 🎉`);
-  }, [leaderboard, matches, user]);
+    refreshLeaderboard();
+  }, [user, predictions, initialMatches]);
+
+  const userRank = user ? leaderboard.findIndex((u) => u.id === user.id) + 1 : 0;
 
   return (
     <div className="app-shell">
@@ -65,10 +81,9 @@ export default function MatchPredictionApp({ initialMatches }: MatchPredictionAp
           alt="دوري التوقعات"
           className="app-logo"
           onError={(e) => {
-            const target = e.currentTarget;
-            target.style.display = 'none';
-            const fallback = target.nextElementSibling as HTMLElement | null;
-            if (fallback) fallback.style.display = 'flex';
+            e.currentTarget.style.display = 'none';
+            const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+            if (fb) fb.style.display = 'flex';
           }}
         />
         <div className="logo-fallback" style={{ display: 'none' }}>
@@ -81,11 +96,11 @@ export default function MatchPredictionApp({ initialMatches }: MatchPredictionAp
       {status && <div className="status-msg">{status}</div>}
 
       {!user ? (
-        <LoginForm onLogin={handleLogin} />
+        <LoginForm onAuth={handleAuth} />
       ) : (
         <div className="user-badge">
-          <div className={`user-rank-badge rank-${user.rank <= 3 ? user.rank : 'other'}`}>
-            {user.rank}
+          <div className={`user-rank-badge rank-${userRank <= 3 ? userRank : 'other'}`}>
+            {userRank || '-'}
           </div>
           <div className="user-info">
             <div className="user-phone">{user.phone}</div>
@@ -99,20 +114,17 @@ export default function MatchPredictionApp({ initialMatches }: MatchPredictionAp
       )}
 
       <PredictionPanel
-        matches={matches}
-        onUpdate={setMatches}
+        matches={initialMatches}
+        predictions={predictions}
+        onPredict={handlePredict}
         disabled={!user}
       />
 
-      <button
-        className="btn-save"
-        onClick={handleSave}
-        disabled={!user}
-      >
-        {user ? '⚡ حفظ التوقعات' : '🔒 سجّل دخولك أولاً'}
+      <button className="btn-save" onClick={handleSave} disabled={!user}>
+        {user ? '💾 حفظ التوقعات' : '🔒 سجّل دخولك أولاً'}
       </button>
 
-      <Leaderboard user={user} scores={leaderboard} />
+      <Leaderboard currentUserId={user?.id ?? null} users={leaderboard} />
     </div>
   );
 }
