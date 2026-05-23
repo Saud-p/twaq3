@@ -61,7 +61,6 @@ export default function PredictionPanel({ matches, predictions, results, onPredi
                 onClick={() => !disabled && !hasResult && onPredict(match.id, 'home')}
                 disabled={disabled || hasResult}
               >
-                <span className="pred-card-num">1</span>
                 <span className="pred-card-team">{match.home}</span>
                 <span className="pred-card-hint">فوز</span>
               </button>
@@ -71,7 +70,6 @@ export default function PredictionPanel({ matches, predictions, results, onPredi
                 onClick={() => !disabled && !hasResult && onPredict(match.id, 'draw')}
                 disabled={disabled || hasResult}
               >
-                <span className="pred-card-num">X</span>
                 <span className="pred-card-team">تعادل</span>
                 <span className="pred-card-hint">—</span>
               </button>
@@ -81,7 +79,6 @@ export default function PredictionPanel({ matches, predictions, results, onPredi
                 onClick={() => !disabled && !hasResult && onPredict(match.id, 'away')}
                 disabled={disabled || hasResult}
               >
-                <span className="pred-card-num">2</span>
                 <span className="pred-card-team">{match.away}</span>
                 <span className="pred-card-hint">فوز</span>
               </button>
