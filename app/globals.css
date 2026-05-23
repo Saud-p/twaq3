@@ -1,0 +1,156 @@
+:root {
+  color-scheme: dark;
+  color: #111827;
+  background: #f8fafc;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  direction: rtl;
+  text-align: right;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+button, input {
+  font: inherit;
+}
+
+.page-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 8px 0 12px;
+  font-size: clamp(2rem, 2.5vw, 3rem);
+}
+
+p {
+  margin: 0;
+  line-height: 1.75;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+button {
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #2563eb;
+  color: white;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-bottom: 24px;
+}
+
+.matches {
+  display: grid;
+  gap: 16px;
+}
+
+.match-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  grid-template-columns: 100px 1fr 80px auto 80px 1fr;
+}
+
+.match-date {
+  color: #475569;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.leaderboard {
+  display: grid;
+  gap: 10px;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 90px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.leaderboard-row.header {
+  font-weight: 700;
+  background: #e0f2fe;
+}
+
+.leaderboard-row.highlight {
+  background: #fef3c7;
+}
+
+.status-card {
+  background: #1f2937;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 18px;
+}
+
+@media (max-width: 640px) {
+  .match-row {
+    grid-template-columns: 1fr 70px auto 70px 1fr;
+  }
+}
