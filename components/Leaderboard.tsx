@@ -24,7 +24,7 @@ export default function Leaderboard({ currentUserId, users }: LeaderboardProps) 
         <>
           <div className="lb-row-header">
             <span></span>
-            <span>الجوال</span>
+            <span>المتوقع</span>
             <span style={{ textAlign: 'left' }}>النقاط</span>
           </div>
           {users.map((item, index) => {
@@ -34,7 +34,7 @@ export default function Leaderboard({ currentUserId, users }: LeaderboardProps) 
                 <div className={`rank-badge rank-${rank <= 3 ? rank : 'other'}`}>
                   {medals[rank] ?? rank}
                 </div>
-                <span className="lb-phone">{item.phone}</span>
+                <span className="lb-phone">{item.name}</span>
                 <span className="lb-points">{item.points}</span>
               </div>
             );
