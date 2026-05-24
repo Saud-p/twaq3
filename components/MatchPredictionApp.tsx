@@ -11,7 +11,9 @@ import {
   getMatchResults, saveSession, loadSession, recalculateUserPoints,
 } from '../lib/storage';
 
-export default function MatchPredictionApp({ initialMatches }: { initialMatches: Match[] }) {
+export default function MatchPredictionApp() {
+  const [matches, setMatches]     = useState<Match[]>([]);
+  const [loadingM, setLoadingM]   = useState(true);
   const [user, setUser]           = useState<StoredUser | null>(null);
   const [predictions, setPreds]   = useState<UserPrediction[]>([]);
   const [leaderboard, setLb]      = useState<StoredUser[]>([]);
@@ -30,6 +32,12 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
       setUser(saved);
       setPreds(getUserPredictions(saved.id));
     }
+
+    fetch('/api/upcoming')
+      .then((r) => r.json())
+      .then((data) => { if (data.fixtures) setMatches(data.fixtures); })
+      .catch(() => {})
+      .finally(() => setLoadingM(false));
   }, []);
 
   const handleAuth = (authedUser: StoredUser) => {
@@ -52,7 +60,6 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
 
     saveUserPredictions(user.id, predictions);
 
-    // احتساب النقاط فوراً بناءً على النتائج المتوفرة
     const updated = recalculateUserPoints(user.id);
     if (updated) setUser(updated);
 
@@ -99,13 +106,24 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
         </div>
       )}
 
-      <PredictionPanel
-        matches={initialMatches}
-        predictions={predictions}
-        results={matchResults}
-        onPredict={handlePredict}
-        disabled={!user}
-      />
+      {loadingM ? (
+        <div className="matches-loading">
+          <span className="loading-spinner" />
+          جاري تحميل المباريات...
+        </div>
+      ) : matches.length === 0 ? (
+        <div className="section">
+          <p className="empty-msg">لا توجد مباريات قادمة حالياً</p>
+        </div>
+      ) : (
+        <PredictionPanel
+          matches={matches}
+          predictions={predictions}
+          results={matchResults}
+          onPredict={handlePredict}
+          disabled={!user}
+        />
+      )}
 
       <button className="btn-save" onClick={handleSave} disabled={!user || !predictions.length}>
         {user ? '💾 حفظ التوقعات' : '🔒 سجّل دخولك أولاً'}
@@ -113,7 +131,6 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
 
       <Leaderboard currentUserId={user?.id ?? null} users={leaderboard} />
 
-      {/* مودال تأكيد الحفظ */}
       {saveModal && (
         <div className="save-overlay" onClick={() => setSaveModal(null)}>
           <div className="save-modal" onClick={(e) => e.stopPropagation()}>

@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { upcomingMatches } from '../lib/matches';
-import type { MatchOutcome } from '../lib/matches';
+import type { Match, MatchOutcome } from '../lib/matches';
 import {
   getAllUsers, approveUser, rejectUser,
   getMatchResults, setMatchResult, clearMatchResult, recalculateAllPoints,
@@ -12,16 +11,27 @@ import type { StoredUser, MatchResult } from '../lib/storage';
 const ADMIN_PASS = 'Saud&Fahad=Heart';
 
 export default function AdminPanel() {
-  const [authed,  setAuthed]  = useState(false);
-  const [pass,    setPass]    = useState('');
-  const [passErr, setPassErr] = useState(false);
-  const [users,   setUsers]   = useState<StoredUser[]>([]);
-  const [results, setResults] = useState<MatchResult[]>([]);
-  const [msg,     setMsg]     = useState('');
+  const [authed,   setAuthed]  = useState(false);
+  const [pass,     setPass]    = useState('');
+  const [passErr,  setPassErr] = useState(false);
+  const [users,    setUsers]   = useState<StoredUser[]>([]);
+  const [results,  setResults] = useState<MatchResult[]>([]);
+  const [matches,  setMatches] = useState<Match[]>([]);
+  const [loadingM, setLoadingM]= useState(false);
+  const [msg,      setMsg]     = useState('');
 
   const refresh = () => { setUsers(getAllUsers()); setResults(getMatchResults()); };
 
-  useEffect(() => { if (authed) refresh(); }, [authed]);
+  useEffect(() => {
+    if (!authed) return;
+    refresh();
+    setLoadingM(true);
+    fetch('/api/upcoming')
+      .then((r) => r.json())
+      .then((data) => { if (data.fixtures) setMatches(data.fixtures); })
+      .catch(() => {})
+      .finally(() => setLoadingM(false));
+  }, [authed]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,12 +60,12 @@ export default function AdminPanel() {
     setMsg('جاري جلب النتائج من API...');
     try {
       const res  = await fetch('/api/fetch-results');
-      const data = await res.json() as { results?: { home: string; away: string; date: string; outcome: MatchOutcome }[]; error?: string };
+      const data = await res.json() as { results?: { id: string; home: string; away: string; date: string; outcome: MatchOutcome }[]; error?: string };
       if (data.error) { setMsg(`خطأ: ${data.error}`); return; }
 
       let count = 0;
       for (const r of data.results ?? []) {
-        const match = upcomingMatches.find((m) => m.home === r.home && m.away === r.away);
+        const match = matches.find((m) => m.id === r.id || (m.home === r.home && m.away === r.away));
         if (match) { setMatchResult(match.id, r.outcome); count++; }
       }
 
@@ -138,7 +148,12 @@ export default function AdminPanel() {
           نتائج المباريات
         </h2>
         <div className="divider" />
-        {upcomingMatches.map((match) => {
+        {loadingM ? (
+          <p className="empty-msg">جاري تحميل المباريات...</p>
+        ) : matches.length === 0 ? (
+          <p className="empty-msg">لا توجد مباريات قادمة حالياً</p>
+        ) : null}
+        {matches.map((match) => {
           const stored = results.find((r) => r.matchId === match.id)?.result ?? null;
           return (
             <div key={match.id} className="admin-match-row">
