@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Match, MatchOutcome } from '../lib/matches';
 import {
-  getAllUsers, approveUser, rejectUser,
+  getAllUsers, approveUser, rejectUser, suspendUser, deleteUser,
   getMatchResults, setMatchResult, clearMatchResult, recalculateAllPoints,
   getCompetitions, addCompetition, removeCompetition, setCompetitionActive,
   getManualMatches, setManualMatches, clearManualMatches,
@@ -576,28 +576,58 @@ export default function AdminPanel() {
         <div className="divider" />
         {approved.length === 0
           ? <p className="empty-msg">لا يوجد أعضاء معتمدون بعد</p>
-          : (
-            <>
-              <div className="lb-row-header">
-                <span></span><span>الاسم</span><span style={{ textAlign: 'left' }}>النقاط</span>
+          : approved.map((u, i) => (
+            <div key={u.id} className="member-manage-row">
+              <div className={`rank-badge rank-${i + 1 <= 3 ? i + 1 : 'other'}`} style={{ flexShrink: 0 }}>{i + 1}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{u.phone} · {u.points} نقطة</div>
               </div>
-              {approved.map((u, i) => {
-                const rank = i + 1;
-                return (
-                  <div key={u.id} className="lb-row">
-                    <div className={`rank-badge rank-${rank <= 3 ? rank : 'other'}`}>{rank}</div>
-                    <div>
-                      <div className="lb-phone">{u.name}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{u.phone}</div>
-                    </div>
-                    <span className="lb-points">{u.points}</span>
-                  </div>
-                );
-              })}
-            </>
-          )
+              <div className="member-manage-actions">
+                <button className="btn-suspend" title="تعليق"
+                  onClick={() => {
+                    if (!window.confirm(`تعليق مشاركة ${u.name}؟ لن يتمكن من الدخول.`)) return;
+                    suspendUser(u.id); refreshUsers(); flash(`تم تعليق مشاركة ${u.name}`);
+                  }}>⏸</button>
+                <button className="btn-delete" title="حذف"
+                  onClick={() => {
+                    if (!window.confirm(`حذف ${u.name} نهائياً؟ لا يمكن التراجع.`)) return;
+                    deleteUser(u.id); refreshUsers(); flash(`تم حذف ${u.name}`);
+                  }}>🗑</button>
+              </div>
+            </div>
+          ))
         }
       </div>
+
+      {/* ── الأعضاء الموقوفون ── */}
+      {users.filter((u) => u.status === 'suspended').length > 0 && (
+        <div className="section">
+          <h2 className="section-title"><span className="icon">⏸️</span>موقوفون ({users.filter((u) => u.status === 'suspended').length})</h2>
+          <div className="divider" />
+          {users.filter((u) => u.status === 'suspended').map((u) => (
+            <div key={u.id} className="admin-user-row">
+              <div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>{u.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.phone}</div>
+              </div>
+              <div className="admin-actions">
+                <button className="btn-approve"
+                  onClick={() => { approveUser(u.id); refreshUsers(); flash(`✓ تم تفعيل ${u.name}`); }}>
+                  ✓ تفعيل
+                </button>
+                <button className="btn-reject"
+                  onClick={() => {
+                    if (!window.confirm(`حذف ${u.name} نهائياً؟`)) return;
+                    deleteUser(u.id); refreshUsers();
+                  }}>
+                  🗑 حذف
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {rejected.length > 0 && (
         <div className="section">
@@ -609,7 +639,14 @@ export default function AdminPanel() {
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.name}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{u.phone}</div>
               </div>
-              <button className="btn-approve" onClick={() => { approveUser(u.id); refreshUsers(); }}>إعادة قبول</button>
+              <div className="admin-actions">
+                <button className="btn-approve" onClick={() => { approveUser(u.id); refreshUsers(); }}>إعادة قبول</button>
+                <button className="btn-reject"
+                  onClick={() => {
+                    if (!window.confirm(`حذف ${u.name} نهائياً؟`)) return;
+                    deleteUser(u.id); refreshUsers();
+                  }}>🗑 حذف</button>
+              </div>
             </div>
           ))}
         </div>

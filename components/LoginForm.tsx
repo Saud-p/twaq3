@@ -38,8 +38,9 @@ export default function LoginForm({ onAuth }: LoginFormProps) {
 
     const user = loginUser(phone.trim(), password);
     if (!user)           { setError('رقم الجوال أو كلمة المرور غير صحيحة'); return; }
-    if (user === 'pending')  { setError('حسابك قيد المراجعة، انتظر موافقة الإدارة'); return; }
-    if (user === 'rejected') { setError('تم رفض طلب تسجيلك، تواصل مع الإدارة'); return; }
+    if (user === 'pending')   { setError('حسابك قيد المراجعة، انتظر موافقة الإدارة'); return; }
+    if (user === 'rejected')  { setError('تم رفض طلب تسجيلك، تواصل مع الإدارة'); return; }
+    if (user === 'suspended') { setError('حسابك موقوف مؤقتاً، تواصل مع الإدارة'); return; }
     onAuth(user);
   };
 

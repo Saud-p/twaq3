@@ -720,6 +720,43 @@ body {
 }
 .admin-result-btn:hover:not(.active) { border-color: rgba(255,255,255,0.18); color: var(--text); }
 
+.member-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+.member-manage-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.btn-suspend {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(245,158,11,0.3);
+  background: rgba(245,158,11,0.08);
+  color: var(--gold);
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.btn-suspend:hover { background: rgba(245,158,11,0.18); }
+
+.btn-delete {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.08);
+  color: #f87171;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.btn-delete:hover { background: rgba(239,68,68,0.18); }
+
 .badge-count {
   margin-right: auto;
   margin-left: 4px;

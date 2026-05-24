@@ -1,6 +1,6 @@
 import type { Match, MatchOutcome } from './matches';
 
-export type UserStatus = 'pending' | 'approved' | 'rejected';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export type StoredUser = {
   id: string; name: string; phone: string;
@@ -55,7 +55,7 @@ export function loadSession(): StoredUser | null {
   if (Date.now() > session.expiresAt) { clearSession(); return null; }
   const user = getAllUsers().find((u) => u.id === session.userId);
   if (!user) return null;
-  if (user.status === 'rejected') { clearSession(); return null; }
+  if (user.status === 'rejected' || user.status === 'suspended') { clearSession(); return null; }
   if (user.status !== 'approved') return null;
   return user;
 }
@@ -79,11 +79,12 @@ export function registerUser(name: string, phone: string, password: string): Sto
   return user;
 }
 
-export function loginUser(phone: string, password: string): StoredUser | 'pending' | 'rejected' | null {
+export function loginUser(phone: string, password: string): StoredUser | 'pending' | 'rejected' | 'suspended' | null {
   const user = getAllUsers().find((u) => u.phone === phone && u.password === password);
   if (!user) return null;
-  if (user.status === 'pending')  return 'pending';
-  if (user.status === 'rejected') return 'rejected';
+  if (user.status === 'pending')   return 'pending';
+  if (user.status === 'rejected')  return 'rejected';
+  if (user.status === 'suspended') return 'suspended';
   return user;
 }
 
@@ -93,6 +94,14 @@ export function approveUser(uid: string) {
 
 export function rejectUser(uid: string) {
   save(USERS_KEY, getAllUsers().map((u) => u.id === uid ? { ...u, status: 'rejected' as UserStatus } : u));
+}
+
+export function suspendUser(uid: string) {
+  save(USERS_KEY, getAllUsers().map((u) => u.id === uid ? { ...u, status: 'suspended' as UserStatus } : u));
+}
+
+export function deleteUser(uid: string) {
+  save(USERS_KEY, getAllUsers().filter((u) => u.id !== uid));
 }
 
 export function getLeaderboard(): StoredUser[] {
