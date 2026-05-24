@@ -13,22 +13,35 @@ import {
 } from '../lib/storage';
 
 export default function MatchPredictionApp() {
-  const [competitions, setComps]    = useState<Competition[]>([]);
-  const [selectedId,   setSelId]    = useState<string>('');
-  const [matchesByComp, setMBC]     = useState<Record<string, Match[]>>({});
-  const [loadingIds,   setLoading]  = useState<Set<string>>(new Set());
-  const [predsByComp,  setPBC]      = useState<Record<string, UserPrediction[]>>({});
-  const [resultsByComp, setRBC]     = useState<Record<string, MatchResult[]>>({});
-  const [user,         setUser]     = useState<StoredUser | null>(null);
-  const [leaderboard,  setLb]       = useState<StoredUser[]>([]);
-  const [saveModal, setSaveModal]   = useState<{ count: number; points: number } | null>(null);
-  const [setupLoading, setSetup]    = useState(true);
-  const [serverTs,     setServerTs] = useState<number | null>(null);
+  const [competitions,  setComps]    = useState<Competition[]>([]);
+  const [selectedId,    setSelId]    = useState<string>('');
+  const [matchesByComp, setMBC]      = useState<Record<string, Match[]>>({});
+  const [loadingIds,    setLoading]  = useState<Set<string>>(new Set());
+  const [predsByComp,   setPBC]      = useState<Record<string, UserPrediction[]>>({});
+  const [resultsByComp, setRBC]      = useState<Record<string, MatchResult[]>>({});
+  const [user,          setUser]     = useState<StoredUser | null>(null);
+  const [leaderboard,   setLb]       = useState<StoredUser[]>([]);
+  const [saveModal,  setSaveModal]   = useState<{ count: number; points: number } | null>(null);
+  const [setupLoading,  setSetup]    = useState(true);
+  const [serverTs,      setServerTs] = useState<number | null>(null);
+  // توقعات الأعضاء الأخرين — تُحمَّل عند بداية كل مباراة
+  const [memberPreds, setMemberPreds] = useState<Record<string, Record<string, UserPrediction[]>>>({});
 
-  const refreshLb = () => setLb(getLeaderboard());
+  // جلب وقت الخادم
+  useEffect(() => {
+    const fetchTs = () =>
+      fetch('/api/time').then((r) => r.json())
+        .then((d) => { if (typeof d.ts === 'number') setServerTs(d.ts); })
+        .catch(() => {});
+    fetchTs();
+    const iv = setInterval(fetchTs, 60_000);
+    return () => clearInterval(iv);
+  }, []);
 
-  const fetchMatches = (comp: Competition) => {
-    const manual = getManualMatches(comp.id);
+  const refreshLb = async () => setLb(await getLeaderboard());
+
+  const fetchMatches = async (comp: Competition) => {
+    const manual = await getManualMatches(comp.id);
     if (manual.length > 0) {
       setMBC((prev) => ({ ...prev, [comp.id]: manual }));
       return;
@@ -41,25 +54,26 @@ export default function MatchPredictionApp() {
       .finally(() => setLoading((s) => { const n = new Set(s); n.delete(comp.id); return n; }));
   };
 
-  const loadResults = (comp: Competition) =>
-    setRBC((prev) => ({ ...prev, [comp.id]: getMatchResults(comp.id) }));
+  const loadResults = async (comp: Competition) => {
+    const res = await getMatchResults(comp.id);
+    setRBC((prev) => ({ ...prev, [comp.id]: res }));
+  };
 
-  const loadPreds = (uid: string, comp: Competition) =>
-    setPBC((prev) => ({ ...prev, [comp.id]: getUserPredictions(uid, comp.id) }));
+  const loadPreds = async (uid: string, comp: Competition) => {
+    const preds = await getUserPredictions(uid, comp.id);
+    setPBC((prev) => ({ ...prev, [comp.id]: preds }));
+  };
 
-  // جلب وقت الخادم — يتجدد كل دقيقة
+  // تحميل توقعات الأعضاء لبطولة معينة
+  const loadMemberPreds = async (compId: string, members: StoredUser[]) => {
+    const out: Record<string, UserPrediction[]> = {};
+    await Promise.all(members.map(async (m) => {
+      out[m.id] = await getUserPredictions(m.id, compId);
+    }));
+    setMemberPreds((prev) => ({ ...prev, [compId]: out }));
+  };
+
   useEffect(() => {
-    const fetchTs = () =>
-      fetch('/api/time').then((r) => r.json())
-        .then((d) => { if (typeof d.ts === 'number') setServerTs(d.ts); })
-        .catch(() => {});
-    fetchTs();
-    const iv = setInterval(fetchTs, 60_000);
-    return () => clearInterval(iv);
-  }, []);
-
-  useEffect(() => {
-    refreshLb();
     const init = async () => {
       const params   = new URLSearchParams(window.location.search);
       const setupIds = params.get('setup')?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
@@ -73,48 +87,57 @@ export default function MatchPredictionApp() {
         window.history.replaceState({}, '', window.location.pathname);
       }
 
-      const comps = getActiveCompetitions();
+      const comps = await getActiveCompetitions();
       setComps(comps);
       if (comps.length > 0) setSelId(comps[0].id);
 
-      const saved = loadSession();
+      const saved = await loadSession();
       if (saved) {
         setUser(saved);
-        comps.forEach((c) => loadPreds(saved.id, c));
+        await Promise.all(comps.map((c) => loadPreds(saved.id, c)));
       }
 
-      comps.forEach((c) => { fetchMatches(c); loadResults(c); });
+      const lb = await getLeaderboard();
+      setLb(lb);
+
+      await Promise.all(comps.map(async (c) => {
+        await fetchMatches(c);
+        await loadResults(c);
+        if (lb.length) await loadMemberPreds(c.id, lb);
+      }));
+
       setSetup(false);
     };
     init();
   }, []);
 
-  // البطولات التي للعضو فيها توقعات — إن لم تكن له توقعات بعد يرى الكل
+  // إعادة تحميل توقعات الأعضاء عند تغيير البطولة أو الترتيب
+  useEffect(() => {
+    if (!selectedId || !leaderboard.length) return;
+    if (!memberPreds[selectedId]) loadMemberPreds(selectedId, leaderboard);
+  }, [selectedId, leaderboard]);
+
   const visibleComps = useMemo(() => {
     if (!user) return competitions;
     const withPreds = competitions.filter((c) => (predsByComp[c.id] ?? []).length > 0);
     return withPreds.length > 0 ? withPreds : competitions;
   }, [user, competitions, predsByComp]);
 
-  // توقعات جميع الأعضاء للبطولة الحالية (للعرض في الأسفل)
-  const currentMemberPreds = useMemo(() => {
-    if (!selectedId || !leaderboard.length) return {};
-    const out: Record<string, UserPrediction[]> = {};
-    leaderboard.forEach((u) => { out[u.id] = getUserPredictions(u.id, selectedId); });
-    return out;
-  }, [selectedId, leaderboard]);
-
-  const handleSelectComp = (id: string) => {
+  const handleSelectComp = async (id: string) => {
     setSelId(id);
     const comp = competitions.find((c) => c.id === id);
-    if (comp) { loadResults(comp); if (!matchesByComp[id]) fetchMatches(comp); }
+    if (comp) {
+      await loadResults(comp);
+      if (!matchesByComp[id]) await fetchMatches(comp);
+    }
+    if (leaderboard.length) await loadMemberPreds(id, leaderboard);
   };
 
-  const handleAuth = (authedUser: StoredUser) => {
+  const handleAuth = async (authedUser: StoredUser) => {
     saveSession(authedUser.id);
     setUser(authedUser);
-    competitions.forEach((c) => loadPreds(authedUser.id, c));
-    refreshLb();
+    await Promise.all(competitions.map((c) => loadPreds(authedUser.id, c)));
+    await refreshLb();
   };
 
   const handleLogout = () => {
@@ -134,26 +157,24 @@ export default function MatchPredictionApp() {
     });
   };
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!user || !selectedId) return;
     const preds = predsByComp[selectedId] ?? [];
     if (!preds.length) return;
-    saveUserPredictions(user.id, selectedId, preds);
-    const updated = recalculateUserPoints(user.id);
+    await saveUserPredictions(user.id, selectedId, preds);
+    const updated = await recalculateUserPoints(user.id);
     if (updated) setUser(updated);
-    refreshLb();
+    await refreshLb();
     setSaveModal({ count: preds.length, points: updated?.points ?? user.points });
   }, [user, selectedId, predsByComp]);
 
-  // تحليل وقت بداية المباراة إلى timestamp UTC
+  // تحليل وقت المباراة
   function parseMatchStartTs(match: Match): number | null {
-    // مباريات API: date="2026-06-11"، time="19:00:00+00:00"
     if (match.time && /^\d{4}-\d{2}-\d{2}$/.test(match.date.trim())) {
       const t = match.time.replace(/\+.*$/, '').trim();
       const dt = new Date(`${match.date}T${t}Z`);
       return isNaN(dt.getTime()) ? null : dt.getTime();
     }
-    // مباريات يدوية: "11/06/26 - 10:00 م" (توقيت السعودية UTC+3)
     const m = match.date.match(/(\d{1,2})\/(\d{2})\/(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*([مص])/);
     if (m) {
       let h = parseInt(m[4]);
@@ -166,22 +187,20 @@ export default function MatchPredictionApp() {
   }
 
   function matchStarted(match: Match): boolean {
-    if (serverTs === null) return false; // لم يُجلب وقت الخادم بعد — الأكثر أماناً: إخفاء
+    if (serverTs === null) return false;
     const startTs = parseMatchStartTs(match);
-    if (startTs === null) return true;   // لا وقت محدد — اعتبرها بدأت
+    if (startTs === null) return true;
     return serverTs >= startTs;
   }
+
+  const predNum = (p: MatchOutcome) => p === 'home' ? '1' : p === 'draw' ? 'X' : '2';
 
   const userRank        = user ? leaderboard.findIndex((u) => u.id === user.id) + 1 : 0;
   const currentPreds    = predsByComp[selectedId]   ?? [];
   const currentResults  = resultsByComp[selectedId] ?? [];
   const currentMatches  = matchesByComp[selectedId] ?? [];
   const isLoadingCurrent = loadingIds.has(selectedId);
-
-  // دالة مساعدة لعرض اسم التوقع
-  const predLabel = (p: MatchOutcome, match: Match) =>
-    p === 'home' ? match.home : p === 'draw' ? 'تعادل' : match.away;
-  const predNum = (p: MatchOutcome) => p === 'home' ? '1' : p === 'draw' ? 'X' : '2';
+  const currentMemberPreds = memberPreds[selectedId] ?? {};
 
   return (
     <div className="app-shell">
@@ -262,7 +281,6 @@ export default function MatchPredictionApp() {
 
       <Leaderboard currentUserId={user?.id ?? null} users={leaderboard} />
 
-      {/* ── توقعات الأعضاء ── */}
       {currentMatches.length > 0 && leaderboard.length > 0 && (
         <div className="section">
           <h2 className="section-title"><span className="icon">📋</span>توقعات الأعضاء</h2>
@@ -284,7 +302,6 @@ export default function MatchPredictionApp() {
                   {!started && <span className="mp-locked-badge">🔒 لم تبدأ</span>}
                 </div>
                 {match.date && <div className="mp-date">{match.date}</div>}
-
                 {started ? (
                   <div className="mp-members">
                     {leaderboard.map((member) => {
@@ -305,9 +322,7 @@ export default function MatchPredictionApp() {
                     })}
                   </div>
                 ) : (
-                  <div className="mp-locked-msg">
-                    تُكشف توقعات الأعضاء بعد بداية المباراة
-                  </div>
+                  <div className="mp-locked-msg">تُكشف توقعات الأعضاء بعد بداية المباراة</div>
                 )}
               </div>
             );

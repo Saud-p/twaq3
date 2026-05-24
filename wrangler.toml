@@ -1,8 +1,8 @@
 name = "twaq3"
 compatibility_date = "2025-04-01"
-compatibility_flags = ["nodejs_compat"]
-main = ".open-next/worker.js"
+pages_build_output_dir = "out"
 
-[assets]
-directory = ".open-next/assets"
-binding = "ASSETS"
+[[kv_namespaces]]
+binding = "DB"
+id = "ab2f852aadb4456d87416e70b6a37f39"
+preview_id = "a7f410fbbcbe492d9152d7c96e848e9f"

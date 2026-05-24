@@ -8,43 +8,43 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onAuth }: LoginFormProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [mode,     setMode]     = useState<'login' | 'register'>('login');
+  const [name,     setName]     = useState('');
+  const [phone,    setPhone]    = useState('');
   const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
+  const [confirm,  setConfirm]  = useState('');
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
 
   const switchMode = (m: 'login' | 'register') => { setMode(m); setError(''); };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (mode === 'register') {
-      if (!name.trim())          { setError('يرجى إدخال الاسم'); return; }
-      if (!phone.trim())         { setError('يرجى إدخال رقم الجوال'); return; }
-      if (password.length < 4)   { setError('كلمة المرور 4 أحرف على الأقل'); return; }
-      if (password !== confirm)  { setError('كلمتا المرور غير متطابقتين'); return; }
-
-      const result = registerUser(name, phone.trim(), password);
-      if (result === 'exists')   { setError('رقم الجوال مسجّل مسبقاً — سجّل دخولك'); return; }
-
-      setError('');
-      // show pending message instead of logging in
+      if (!name.trim())         { setError('يرجى إدخال الاسم'); return; }
+      if (!phone.trim())        { setError('يرجى إدخال رقم الجوال'); return; }
+      if (password.length < 4)  { setError('كلمة المرور 4 أحرف على الأقل'); return; }
+      if (password !== confirm) { setError('كلمتا المرور غير متطابقتين'); return; }
+      setLoading(true);
+      const result = await registerUser(name, phone.trim(), password);
+      setLoading(false);
+      if (result === 'exists') { setError('رقم الجوال مسجّل مسبقاً — سجّل دخولك'); return; }
       setMode('pending' as never);
       return;
     }
 
-    const user = loginUser(phone.trim(), password);
-    if (!user)           { setError('رقم الجوال أو كلمة المرور غير صحيحة'); return; }
+    setLoading(true);
+    const user = await loginUser(phone.trim(), password);
+    setLoading(false);
+    if (!user)              { setError('رقم الجوال أو كلمة المرور غير صحيحة'); return; }
     if (user === 'pending')   { setError('حسابك قيد المراجعة، انتظر موافقة الإدارة'); return; }
     if (user === 'rejected')  { setError('تم رفض طلب تسجيلك، تواصل مع الإدارة'); return; }
     if (user === 'suspended') { setError('حسابك موقوف مؤقتاً، تواصل مع الإدارة'); return; }
     onAuth(user);
   };
 
-  // After successful registration — show waiting screen
   if ((mode as string) === 'pending') {
     return (
       <div className="section">
@@ -100,8 +100,8 @@ export default function LoginForm({ onAuth }: LoginFormProps) {
               placeholder="••••••••" autoComplete="new-password" />
           </div>
         )}
-        <button type="submit" className="btn-primary">
-          {mode === 'register' ? 'إرسال طلب التسجيل' : 'دخول'}
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? '...' : mode === 'register' ? 'إرسال طلب التسجيل' : 'دخول'}
         </button>
       </form>
     </div>

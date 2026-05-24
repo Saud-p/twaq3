@@ -11,7 +11,7 @@ import {
 import type { StoredUser, MatchResult, Competition } from '../lib/storage';
 
 const ADMIN_PASS    = 'Saud&Fahad=Heart';
-const ADMIN_SESSION  = 'twaq3_admin_session';
+const ADMIN_SESSION = 'twaq3_admin_session';
 
 function isAdminSessionValid(): boolean {
   if (typeof window === 'undefined') return false;
@@ -36,58 +36,30 @@ export default function AdminPanel() {
   const [users,    setUsers]   = useState<StoredUser[]>([]);
   const [msg,      setMsg]     = useState('');
 
-  // إدارة البطولات
-  const [competitions, setComps]     = useState<Competition[]>([]);
-  const [lookupInput,  setLookup]    = useState('');
-  const [lookupRes,    setLookupRes] = useState<Competition | null>(null);
-  const [lookupLoading, setLL]       = useState(false);
-  const [shareUrl,     setShareUrl]  = useState('');
+  const [competitions,  setComps]     = useState<Competition[]>([]);
+  const [lookupInput,   setLookup]    = useState('');
+  const [lookupRes,     setLookupRes] = useState<Competition | null>(null);
+  const [lookupLoading, setLL]        = useState(false);
+  const [shareUrl,      setShareUrl]  = useState('');
 
-  // الإدخال اليدوي
-  const [manualText,    setManualText]    = useState('');
-  const [manualParsed,  setManualParsed]  = useState<Match[]>([]);
-  const [manualSaved,   setManualSaved]   = useState(false);
+  const [manualText,   setManualText]   = useState('');
+  const [manualParsed, setManualParsed] = useState<Match[]>([]);
+  const [manualSaved,  setManualSaved]  = useState(false);
 
-  // النتائج
-  const [selComp,    setSelComp]  = useState<string>('');
-  const [matches,    setMatches]  = useState<Match[]>([]);
-  const [results,    setResults]  = useState<MatchResult[]>([]);
-  const [loadingM,   setLoadingM] = useState(false);
+  const [selComp,  setSelComp]  = useState<string>('');
+  const [matches,  setMatches]  = useState<Match[]>([]);
+  const [results,  setResults]  = useState<MatchResult[]>([]);
+  const [loadingM, setLoadingM] = useState(false);
 
   const flash = (m: string, t = 3500) => { setMsg(m); setTimeout(() => setMsg(''), t); };
 
-  function parseMatchText(text: string): Match[] {
-    const blocks = text.trim().split(/\n\s*\n/);
-    const parsed: Match[] = [];
-    for (const block of blocks) {
-      const lines = block.trim().split('\n').map((l) => l.trim()).filter(Boolean);
-      if (lines.length < 2) continue;
-      // السطر الأول يبدأ بأرقام (التاريخ)، السطر التالي هو الفريقان
-      const dateLine = lines.find((l) => /^\d/.test(l)) ?? '';
-      const teamLine = lines.find((l) => /^[؀-ۿa-zA-Z]/.test(l)) ?? '';
-      if (!teamLine) continue;
-      // الفصل بين الفريقين بـ " - "
-      const sep = teamLine.lastIndexOf(' - ');
-      if (sep === -1) continue;
-      const home = teamLine.slice(0, sep).trim();
-      const away = teamLine.slice(sep + 3).trim();
-      if (!home || !away) continue;
-      // معرّف ثابت بناءً على محتوى المباراة
-      let h = 0;
-      for (const c of `${home}|${away}|${dateLine}`) { h = ((h << 5) - h + c.charCodeAt(0)) | 0; }
-      parsed.push({ id: `m${Math.abs(h).toString(36)}`, home, away, date: dateLine });
-    }
-    return parsed;
-  }
-
-  const refreshComps = () => {
-    const comps = getCompetitions();
+  const refreshUsers = async () => setUsers(await getAllUsers());
+  const refreshComps = async () => {
+    const comps = await getCompetitions();
     setComps(comps);
     return comps;
   };
-
-  const refreshUsers   = () => setUsers(getAllUsers());
-  const refreshResults = (lid: string) => setResults(getMatchResults(lid));
+  const refreshResults = async (lid: string) => setResults(await getMatchResults(lid));
 
   const loadMatchesFor = (lid: string) => {
     setLoadingM(true);
@@ -99,25 +71,28 @@ export default function AdminPanel() {
       .finally(() => setLoadingM(false));
   };
 
+  // polling المستخدمين كل 30 ثانية
   useEffect(() => {
     if (!authed) return;
     refreshUsers();
-    // مراقبة طلبات التسجيل الجديدة كل 30 ثانية
     const iv = setInterval(refreshUsers, 30_000);
     return () => clearInterval(iv);
   }, [authed]);
 
   useEffect(() => {
     if (!authed) return;
-    const comps = refreshComps();
-    const first = comps.find((c) => c.active);
-    if (first) {
-      setSelComp(first.id);
-      refreshResults(first.id);
-      const saved = getManualMatches(first.id);
-      if (saved.length) { setMatches(saved); setManualParsed(saved); setManualSaved(true); }
-      else loadMatchesFor(first.id);
-    }
+    const init = async () => {
+      const comps = await refreshComps();
+      const first = comps.find((c) => c.active);
+      if (first) {
+        setSelComp(first.id);
+        await refreshResults(first.id);
+        const saved = await getManualMatches(first.id);
+        if (saved.length) { setMatches(saved); setManualParsed(saved); setManualSaved(true); }
+        else loadMatchesFor(first.id);
+      }
+    };
+    init();
   }, [authed]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -130,111 +105,111 @@ export default function AdminPanel() {
   const handleLookup = async () => {
     const raw = lookupInput.trim();
     if (!raw) return;
-    setLL(true);
-    setLookupRes(null);
+    setLL(true); setLookupRes(null);
     try {
       const res  = await fetch(`/api/league-lookup?id=${encodeURIComponent(raw)}`);
       const data = await res.json();
       if (data.league) setLookupRes(data.league);
       else flash('لم يتم العثور على البطولة — تحقق من الرقم أو الرابط');
-    } catch {
-      flash('فشل الاتصال — تحقق من الإنترنت');
-    } finally {
-      setLL(false);
-    }
+    } catch { flash('فشل الاتصال'); }
+    finally { setLL(false); }
   };
 
-  const handleAddComp = () => {
+  const handleAddComp = async () => {
     if (!lookupRes) return;
-    addCompetition(lookupRes);
-    refreshComps();
-    setLookupRes(null);
-    setLookup('');
+    await addCompetition(lookupRes);
+    await refreshComps();
+    setLookupRes(null); setLookup('');
     flash('✓ تمت إضافة البطولة');
   };
 
-  const handleToggleActive = (id: string, active: boolean) => {
-    setCompetitionActive(id, active);
-    refreshComps();
+  const handleToggleActive = async (id: string, active: boolean) => {
+    await setCompetitionActive(id, active);
+    await refreshComps();
   };
 
-  const handleRemoveComp = (comp: Competition) => {
-    const enteredPass = window.prompt(
-      `⚠️ تحذير: سيتم حذف بطولة "${comp.name}" نهائياً.\n\nأدخل كلمة المرور للتأكيد:`
-    );
-    if (enteredPass === null) return; // ألغى
-    if (enteredPass !== ADMIN_PASS) { flash('كلمة المرور غير صحيحة — لم يتم الحذف'); return; }
-    removeCompetition(comp.id);
-    const comps = refreshComps();
+  const handleRemoveComp = async (comp: Competition) => {
+    const enteredPass = window.prompt(`⚠️ سيتم حذف "${comp.name}" نهائياً.\n\nأدخل كلمة المرور:`);
+    if (enteredPass === null) return;
+    if (enteredPass !== ADMIN_PASS) { flash('كلمة المرور غير صحيحة'); return; }
+    await removeCompetition(comp.id);
+    const comps = await refreshComps();
     if (selComp === comp.id) {
       const first = comps.find((c) => c.active);
-      if (first) { setSelComp(first.id); loadMatchesFor(first.id); refreshResults(first.id); }
+      if (first) { setSelComp(first.id); loadMatchesFor(first.id); await refreshResults(first.id); }
       else { setSelComp(''); setMatches([]); setResults([]); }
     }
-    flash(`✓ تم حذف بطولة "${comp.name}"`);
+    flash(`✓ تم حذف "${comp.name}"`);
   };
 
   const handleGenerateShare = () => {
     const active = competitions.filter((c) => c.active);
-    if (!active.length) { flash('لا توجد بطولات نشطة لمشاركتها'); return; }
-    const ids = active.map((c) => c.id).join(',');
-    const url = `${window.location.origin}/?setup=${ids}`;
-    setShareUrl(url);
+    if (!active.length) { flash('لا توجد بطولات نشطة'); return; }
+    setShareUrl(`${window.location.origin}/?setup=${active.map((c) => c.id).join(',')}`);
   };
 
   // ── الإدخال اليدوي ──
+  function parseMatchText(text: string): Match[] {
+    const blocks = text.trim().split(/\n\s*\n/);
+    const parsed: Match[] = [];
+    for (const block of blocks) {
+      const lines = block.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length < 2) continue;
+      const dateLine = lines.find((l) => /^\d/.test(l)) ?? '';
+      const teamLine = lines.find((l) => /^[؀-ۿa-zA-Z]/.test(l)) ?? '';
+      if (!teamLine) continue;
+      const sep = teamLine.lastIndexOf(' - ');
+      if (sep === -1) continue;
+      const home = teamLine.slice(0, sep).trim();
+      const away = teamLine.slice(sep + 3).trim();
+      if (!home || !away) continue;
+      let h = 0;
+      for (const c of `${home}|${away}|${dateLine}`) { h = ((h << 5) - h + c.charCodeAt(0)) | 0; }
+      parsed.push({ id: `m${Math.abs(h).toString(36)}`, home, away, date: dateLine });
+    }
+    return parsed;
+  }
+
   const handleParseManual = () => {
     const parsed = parseMatchText(manualText);
-    setManualParsed(parsed);
-    setManualSaved(false);
-    if (!parsed.length) flash('لم يتم التعرف على أي مباراة — تحقق من الصيغة');
+    setManualParsed(parsed); setManualSaved(false);
+    if (!parsed.length) flash('لم يتم التعرف على أي مباراة');
   };
 
-  const handleSaveManual = () => {
+  const handleSaveManual = async () => {
     if (!selComp) { flash('اختر بطولة أولاً'); return; }
-    if (!manualParsed.length) { flash('لا توجد مباريات للحفظ — اضغط "معاينة" أولاً'); return; }
-    setManualMatches(selComp, manualParsed);
-    setMatches(manualParsed);
-    setManualSaved(true);
-    flash(`✓ تم حفظ ${manualParsed.length} مباراة يدوياً`);
+    if (!manualParsed.length) { flash('اضغط "معاينة" أولاً'); return; }
+    await setManualMatches(selComp, manualParsed);
+    setMatches(manualParsed); setManualSaved(true);
+    flash(`✓ تم حفظ ${manualParsed.length} مباراة`);
   };
 
-  const handleClearManual = () => {
+  const handleClearManual = async () => {
     if (!selComp) return;
-    clearManualMatches(selComp);
-    setManualText('');
-    setManualParsed([]);
-    setManualSaved(false);
+    await clearManualMatches(selComp);
+    setManualText(''); setManualParsed([]); setManualSaved(false);
     loadMatchesFor(selComp);
-    flash('تم مسح المباريات اليدوية — جاري التحميل من API');
+    flash('تم المسح — جاري التحميل من API');
   };
 
-  // ── تبديل البطولة في قسم النتائج ──
-  const handleSelComp = (id: string) => {
+  // ── تبديل البطولة ──
+  const handleSelComp = async (id: string) => {
     setSelComp(id);
-    // تحميل النص اليدوي المحفوظ إن وجد
-    const saved = getManualMatches(id);
-    if (saved.length) {
-      setMatches(saved);
-      setManualParsed(saved);
-      setManualSaved(true);
-    } else {
-      loadMatchesFor(id);
-      setManualParsed([]);
-      setManualSaved(false);
-    }
+    const saved = await getManualMatches(id);
+    if (saved.length) { setMatches(saved); setManualParsed(saved); setManualSaved(true); }
+    else { loadMatchesFor(id); setManualParsed([]); setManualSaved(false); }
     setManualText('');
-    refreshResults(id);
+    await refreshResults(id);
   };
 
-  // ── النتائج (مع احتساب تلقائي للنقاط) ──
-  const handleResult = (matchId: string, outcome: MatchOutcome) => {
+  // ── النتائج ──
+  const handleResult = async (matchId: string, outcome: MatchOutcome) => {
     const existing = results.find((r) => r.matchId === matchId)?.result;
-    if (existing === outcome) clearMatchResult(selComp, matchId);
-    else setMatchResult(selComp, matchId, outcome);
-    refreshResults(selComp);
-    recalculateAllPoints();
-    refreshUsers();
+    if (existing === outcome) await clearMatchResult(selComp, matchId);
+    else await setMatchResult(selComp, matchId, outcome);
+    await refreshResults(selComp);
+    await recalculateAllPoints();
+    await refreshUsers();
   };
 
   const handleAutoFetch = async () => {
@@ -247,19 +222,16 @@ export default function AdminPanel() {
         error?: string;
       };
       if (data.error) { flash(`خطأ: ${data.error}`); return; }
-
       let count = 0;
       for (const r of data.results ?? []) {
         const match = matches.find((m) => m.id === r.id || (m.home === r.home && m.away === r.away));
-        if (match) { setMatchResult(selComp, match.id, r.outcome); count++; }
+        if (match) { await setMatchResult(selComp, match.id, r.outcome); count++; }
       }
-      refreshResults(selComp);
-      recalculateAllPoints();
-      refreshUsers();
-      flash(count > 0 ? `✓ تم جلب ${count} نتيجة وتحديث النقاط` : 'لا توجد نتائج مطابقة للمباريات الحالية');
-    } catch {
-      flash('فشل الاتصال — تحقق من الاتصال بالإنترنت');
-    }
+      await refreshResults(selComp);
+      await recalculateAllPoints();
+      await refreshUsers();
+      flash(count > 0 ? `✓ تم جلب ${count} نتيجة وتحديث النقاط` : 'لا توجد نتائج مطابقة');
+    } catch { flash('فشل الاتصال'); }
   };
 
   // ── تسجيل الدخول ──
@@ -285,9 +257,10 @@ export default function AdminPanel() {
     );
   }
 
-  const pending  = users.filter((u) => u.status === 'pending');
-  const approved = users.filter((u) => u.status === 'approved').sort((a, b) => b.points - a.points);
-  const rejected = users.filter((u) => u.status === 'rejected');
+  const pending     = users.filter((u) => u.status === 'pending');
+  const approved    = users.filter((u) => u.status === 'approved').sort((a, b) => b.points - a.points);
+  const suspended   = users.filter((u) => u.status === 'suspended');
+  const rejected    = users.filter((u) => u.status === 'rejected');
   const activeComps = competitions.filter((c) => c.active);
 
   return (
@@ -302,21 +275,18 @@ export default function AdminPanel() {
           onClick={() => {
             if (!window.confirm('هل تريد تسجيل الخروج من لوحة التحكم؟')) return;
             localStorage.removeItem(ADMIN_SESSION);
-            setAuthed(false);
-            setPass('');
-          }}>
-          ⏻
-        </button>
+            setAuthed(false); setPass('');
+          }}>⏻</button>
       </header>
 
-      {/* ── إشعار الطلبات المعلّقة ── */}
+      {/* إشعار الطلبات المعلّقة */}
       {pending.length > 0 && (
         <div className="pending-alert">
           <div className="pending-alert-title">
             <span className="pending-alert-dot" />
             {pending.length === 1
               ? `طلب تسجيل جديد من ${pending[0].name}`
-              : `${pending.length} طلبات تسجيل جديدة تنتظر المراجعة`}
+              : `${pending.length} طلبات تسجيل جديدة`}
           </div>
           <div className="pending-alert-list">
             {pending.map((u) => (
@@ -327,11 +297,11 @@ export default function AdminPanel() {
                 </div>
                 <div className="pending-alert-actions">
                   <button className="btn-approve"
-                    onClick={() => { approveUser(u.id); refreshUsers(); flash(`✓ تم قبول ${u.name}`); }}>
+                    onClick={async () => { await approveUser(u.id); await refreshUsers(); flash(`✓ تم قبول ${u.name}`); }}>
                     ✓ قبول
                   </button>
                   <button className="btn-reject"
-                    onClick={() => { rejectUser(u.id); refreshUsers(); flash(`تم رفض ${u.name}`); }}>
+                    onClick={async () => { await rejectUser(u.id); await refreshUsers(); flash(`تم رفض ${u.name}`); }}>
                     ✗ رفض
                   </button>
                 </div>
@@ -347,17 +317,12 @@ export default function AdminPanel() {
       <div className="section">
         <h2 className="section-title"><span className="icon">🏆</span>إدارة البطولات</h2>
         <div className="divider" />
-
-        {/* إضافة بطولة جديدة */}
         <div className="league-search-row">
-          <input
-            className="league-search-input"
+          <input className="league-search-input" dir="ltr"
             placeholder="رقم البطولة أو رابطها من TheSportsDB"
             value={lookupInput}
             onChange={(e) => setLookup(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-            dir="ltr"
-          />
+            onKeyDown={(e) => e.key === 'Enter' && handleLookup()} />
           <button className="btn-primary league-search-btn" onClick={handleLookup} disabled={lookupLoading}>
             {lookupLoading ? '...' : '🔍'}
           </button>
@@ -374,7 +339,6 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* قائمة البطولات المحفوظة */}
         {competitions.length > 0 && (
           <div style={{ marginTop: 12 }}>
             {competitions.map((c) => (
@@ -385,38 +349,30 @@ export default function AdminPanel() {
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{c.country} · #{c.id}</div>
                 </div>
                 <div className="comp-manage-actions">
-                  <button
-                    className={c.active ? 'btn-reject' : 'btn-approve'}
+                  <button className={c.active ? 'btn-reject' : 'btn-approve'}
                     onClick={() => handleToggleActive(c.id, !c.active)}
-                    style={{ fontSize: '0.75rem', padding: '5px 10px' }}
-                  >
+                    style={{ fontSize: '0.75rem', padding: '5px 10px' }}>
                     {c.active ? 'إيقاف' : 'تفعيل'}
                   </button>
-                  <button
-                    className="btn-reject"
-                    onClick={() => handleRemoveComp(c)}
-                    style={{ fontSize: '0.75rem', padding: '5px 10px' }}
-                  >
-                    حذف
-                  </button>
+                  <button className="btn-reject" onClick={() => handleRemoveComp(c)}
+                    style={{ fontSize: '0.75rem', padding: '5px 10px' }}>حذف</button>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* رابط المشاركة */}
         <button className="btn-primary" style={{ marginTop: 14 }} onClick={handleGenerateShare}>
           🔗 توليد رابط المشاركة
         </button>
         {shareUrl && (
           <div className="share-url-box" style={{ marginTop: 10 }}>
-            <div className="share-url-label">أرسل هذا الرابط للأعضاء لتطبيق البطولات عندهم:</div>
+            <div className="share-url-label">أرسل هذا الرابط للأعضاء:</div>
             <div className="share-url-row">
               <input readOnly value={shareUrl} className="share-url-input"
                 onFocus={(e) => e.currentTarget.select()} dir="ltr" />
               <button className="btn-primary" style={{ padding: '8px 14px', flexShrink: 0 }}
-                onClick={() => navigator.clipboard.writeText(shareUrl).then(() => flash('تم نسخ الرابط ✓', 2000))}>
+                onClick={() => navigator.clipboard.writeText(shareUrl).then(() => flash('تم النسخ ✓', 2000))}>
                 نسخ
               </button>
             </div>
@@ -428,28 +384,20 @@ export default function AdminPanel() {
       <div className="section">
         <h2 className="section-title"><span className="icon">✏️</span>إدخال المباريات يدوياً</h2>
         <div className="divider" />
-
         {activeComps.length > 1 && (
           <div style={{ marginBottom: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            البطولة المحددة: <strong style={{ color: 'var(--green)' }}>
+            البطولة: <strong style={{ color: 'var(--green)' }}>
               {competitions.find((c) => c.id === selComp)?.name ?? selComp}
             </strong>
           </div>
         )}
-
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.7 }}>
-          الصيغة: التاريخ والوقت في السطر الأول، ثم اسم الفريق الأول - اسم الفريق الثاني
+          الصيغة: التاريخ والوقت في السطر الأول، ثم الفريق الأول - الفريق الثاني
         </div>
-
-        <textarea
-          className="manual-matches-input"
-          placeholder={`11/06/26 - 10:00 م\nالمكسيك - جنوب أفريقيا\n\n12/06/26 - 05:00 ص\nكوريا الجنوبية - جمهورية التشيك`}
+        <textarea className="manual-matches-input" rows={10} dir="rtl"
+          placeholder={`11/06/26 - 10:00 م\nالمكسيك - جنوب أفريقيا\n\n12/06/26 - 05:00 ص\nكوريا الجنوبية - التشيك`}
           value={manualText}
-          onChange={(e) => { setManualText(e.target.value); setManualParsed([]); setManualSaved(false); }}
-          rows={10}
-          dir="rtl"
-        />
-
+          onChange={(e) => { setManualText(e.target.value); setManualParsed([]); setManualSaved(false); }} />
         {manualParsed.length > 0 && (
           <div className="manual-preview">
             <div className="manual-preview-title">معاينة — {manualParsed.length} مباريات:</div>
@@ -464,10 +412,8 @@ export default function AdminPanel() {
             ))}
           </div>
         )}
-
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button className="btn-primary" style={{ flex: 1 }} onClick={handleParseManual}
-            disabled={!manualText.trim()}>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={handleParseManual} disabled={!manualText.trim()}>
             👁️ معاينة
           </button>
           <button className="btn-primary" style={{ flex: 1 }} onClick={handleSaveManual}
@@ -475,7 +421,6 @@ export default function AdminPanel() {
             {manualSaved ? '✓ محفوظ' : '💾 حفظ'}
           </button>
         </div>
-
         {manualSaved && (
           <button className="btn-reject" style={{ width: '100%', marginTop: 8, padding: '10px' }}
             onClick={handleClearManual}>
@@ -484,36 +429,10 @@ export default function AdminPanel() {
         )}
       </div>
 
-      {/* ── طلبات التسجيل ── */}
-      <div className="section">
-        <h2 className="section-title">
-          <span className="icon">⏳</span>
-          طلبات التسجيل
-          {pending.length > 0 && <span className="badge-count">{pending.length}</span>}
-        </h2>
-        <div className="divider" />
-        {pending.length === 0
-          ? <p className="empty-msg">لا توجد طلبات منتظرة</p>
-          : pending.map((u) => (
-            <div key={u.id} className="admin-user-row">
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{u.name}</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{u.phone}</div>
-              </div>
-              <div className="admin-actions">
-                <button className="btn-approve" onClick={() => { approveUser(u.id); refreshUsers(); }}>✓ قبول</button>
-                <button className="btn-reject"  onClick={() => { rejectUser(u.id);  refreshUsers(); }}>✗ رفض</button>
-              </div>
-            </div>
-          ))
-        }
-      </div>
-
       {/* ── نتائج المباريات ── */}
       <div className="section">
         <h2 className="section-title"><span className="icon">⚽</span>نتائج المباريات</h2>
         <div className="divider" />
-
         {activeComps.length > 1 && (
           <div className="comp-tabs-bar">
             {activeComps.map((c) => (
@@ -526,51 +445,47 @@ export default function AdminPanel() {
             ))}
           </div>
         )}
-
         {!selComp ? (
           <p className="empty-msg">أضف بطولة أولاً وفعّلها</p>
         ) : loadingM ? (
           <p className="empty-msg">جاري تحميل المباريات...</p>
         ) : matches.length === 0 ? (
-          <p className="empty-msg">لا توجد مباريات قادمة لهذه البطولة</p>
-        ) : (
-          matches.map((match) => {
-            const stored = results.find((r) => r.matchId === match.id)?.result ?? null;
-            return (
-              <div key={match.id} className="admin-match-row">
-                <div className="admin-match-teams">
-                  <span>{match.home}</span>
-                  <span className="vs-sep" style={{ fontSize: '0.8rem' }}>vs</span>
-                  <span>{match.away}</span>
-                </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 8 }}>
-                  {match.date}
-                </div>
-                <div className="admin-result-btns">
-                  {(['home', 'draw', 'away'] as MatchOutcome[]).map((o) => (
-                    <button key={o}
-                      className={`admin-result-btn${stored === o ? ' active' : ''}`}
-                      onClick={() => handleResult(match.id, o)}>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>
-                        {o === 'home' ? '1' : o === 'draw' ? 'X' : '2'}
-                      </div>
-                      <div style={{ fontSize: '0.65rem' }}>
-                        {o === 'home' ? match.home : o === 'draw' ? 'تعادل' : match.away}
-                      </div>
-                    </button>
-                  ))}
-                </div>
+          <p className="empty-msg">لا توجد مباريات قادمة</p>
+        ) : matches.map((match) => {
+          const stored = results.find((r) => r.matchId === match.id)?.result ?? null;
+          return (
+            <div key={match.id} className="admin-match-row">
+              <div className="admin-match-teams">
+                <span>{match.home}</span>
+                <span className="vs-sep" style={{ fontSize: '0.8rem' }}>vs</span>
+                <span>{match.away}</span>
               </div>
-            );
-          })
-        )}
-
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 8 }}>
+                {match.date}
+              </div>
+              <div className="admin-result-btns">
+                {(['home', 'draw', 'away'] as MatchOutcome[]).map((o) => (
+                  <button key={o}
+                    className={`admin-result-btn${stored === o ? ' active' : ''}`}
+                    onClick={() => handleResult(match.id, o)}>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>
+                      {o === 'home' ? '1' : o === 'draw' ? 'X' : '2'}
+                    </div>
+                    <div style={{ fontSize: '0.65rem' }}>
+                      {o === 'home' ? match.home : o === 'draw' ? 'تعادل' : match.away}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
         <button className="btn-primary" style={{ marginTop: 12 }} onClick={handleAutoFetch} disabled={!selComp}>
           🔄 جلب النتائج تلقائياً من API
         </button>
       </div>
 
-      {/* ── الأعضاء المعتمدون ── */}
+      {/* ── الأعضاء ── */}
       <div className="section">
         <h2 className="section-title"><span className="icon">👥</span>الأعضاء ({approved.length})</h2>
         <div className="divider" />
@@ -585,14 +500,14 @@ export default function AdminPanel() {
               </div>
               <div className="member-manage-actions">
                 <button className="btn-suspend" title="تعليق"
-                  onClick={() => {
-                    if (!window.confirm(`تعليق مشاركة ${u.name}؟ لن يتمكن من الدخول.`)) return;
-                    suspendUser(u.id); refreshUsers(); flash(`تم تعليق مشاركة ${u.name}`);
+                  onClick={async () => {
+                    if (!window.confirm(`تعليق مشاركة ${u.name}؟`)) return;
+                    await suspendUser(u.id); await refreshUsers(); flash(`تم تعليق ${u.name}`);
                   }}>⏸</button>
                 <button className="btn-delete" title="حذف"
-                  onClick={() => {
-                    if (!window.confirm(`حذف ${u.name} نهائياً؟ لا يمكن التراجع.`)) return;
-                    deleteUser(u.id); refreshUsers(); flash(`تم حذف ${u.name}`);
+                  onClick={async () => {
+                    if (!window.confirm(`حذف ${u.name} نهائياً؟`)) return;
+                    await deleteUser(u.id); await refreshUsers(); flash(`تم حذف ${u.name}`);
                   }}>🗑</button>
               </div>
             </div>
@@ -600,12 +515,11 @@ export default function AdminPanel() {
         }
       </div>
 
-      {/* ── الأعضاء الموقوفون ── */}
-      {users.filter((u) => u.status === 'suspended').length > 0 && (
+      {suspended.length > 0 && (
         <div className="section">
-          <h2 className="section-title"><span className="icon">⏸️</span>موقوفون ({users.filter((u) => u.status === 'suspended').length})</h2>
+          <h2 className="section-title"><span className="icon">⏸️</span>موقوفون ({suspended.length})</h2>
           <div className="divider" />
-          {users.filter((u) => u.status === 'suspended').map((u) => (
+          {suspended.map((u) => (
             <div key={u.id} className="admin-user-row">
               <div>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>{u.name}</div>
@@ -613,16 +527,14 @@ export default function AdminPanel() {
               </div>
               <div className="admin-actions">
                 <button className="btn-approve"
-                  onClick={() => { approveUser(u.id); refreshUsers(); flash(`✓ تم تفعيل ${u.name}`); }}>
+                  onClick={async () => { await approveUser(u.id); await refreshUsers(); flash(`✓ تم تفعيل ${u.name}`); }}>
                   ✓ تفعيل
                 </button>
                 <button className="btn-reject"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!window.confirm(`حذف ${u.name} نهائياً؟`)) return;
-                    deleteUser(u.id); refreshUsers();
-                  }}>
-                  🗑 حذف
-                </button>
+                    await deleteUser(u.id); await refreshUsers();
+                  }}>🗑 حذف</button>
               </div>
             </div>
           ))}
@@ -640,11 +552,12 @@ export default function AdminPanel() {
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{u.phone}</div>
               </div>
               <div className="admin-actions">
-                <button className="btn-approve" onClick={() => { approveUser(u.id); refreshUsers(); }}>إعادة قبول</button>
+                <button className="btn-approve"
+                  onClick={async () => { await approveUser(u.id); await refreshUsers(); }}>إعادة قبول</button>
                 <button className="btn-reject"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!window.confirm(`حذف ${u.name} نهائياً؟`)) return;
-                    deleteUser(u.id); refreshUsers();
+                    await deleteUser(u.id); await refreshUsers();
                   }}>🗑 حذف</button>
               </div>
             </div>

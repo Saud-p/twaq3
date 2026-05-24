@@ -16,71 +16,90 @@ export type MatchResult = {
 };
 
 export type Competition = {
-  id: string;      // TheSportsDB league ID
-  name: string;
-  country: string;
-  badge: string;
-  active: boolean;
+  id: string; name: string; country: string; badge: string; active: boolean;
 };
 
-const USERS_KEY      = 'twaq3_users';
-const SESSION_KEY    = 'twaq3_session';
-const COMPS_KEY      = 'twaq3_competitions';
-const resultsKey     = (lid: string) => `twaq3_r_${lid}`;
-const predsKey       = (uid: string, lid: string) => `twaq3_p_${uid}_${lid}`;
-const manualMatchKey = (lid: string) => `twaq3_manual_${lid}`;
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+/* ── KV helpers ── */
+async function kvGet<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(`/api/kv?key=${encodeURIComponent(key)}`);
+    if (!res.ok) return fallback;
+    const data = await res.json() as { value: T | null };
+    return data.value ?? fallback;
+  } catch { return fallback; }
+}
 
+async function kvSet(key: string, val: unknown): Promise<void> {
+  try {
+    await fetch(`/api/kv?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(val),
+    });
+  } catch { /* ignore */ }
+}
+
+/* ── Key names ── */
+const USERS_KEY      = 'users';
+const COMPS_KEY      = 'competitions';
+const resultsKey     = (lid: string)               => `results:${lid}`;
+const predsKey       = (uid: string, lid: string)  => `preds:${uid}:${lid}`;
+const manualMatchKey = (lid: string)               => `manual:${lid}`;
+
+/* ── Session (stays in localStorage — just the token) ── */
+const SESSION_KEY = 'twaq3_session';
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 type Session = { userId: string; expiresAt: number };
 
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; }
-  catch { return fallback; }
-}
-
-function save(key: string, val: unknown) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(val));
-}
-
-/* ── Session ── */
 export function saveSession(userId: string) {
-  save(SESSION_KEY, { userId, expiresAt: Date.now() + ONE_YEAR_MS });
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, expiresAt: Date.now() + ONE_YEAR_MS }));
 }
 
-export function loadSession(): StoredUser | null {
-  const session = load<Session | null>(SESSION_KEY, null);
-  if (!session) return null;
-  if (Date.now() > session.expiresAt) { clearSession(); return null; }
-  const user = getAllUsers().find((u) => u.id === session.userId);
-  if (!user) return null;
-  if (user.status === 'rejected' || user.status === 'suspended') { clearSession(); return null; }
-  if (user.status !== 'approved') return null;
-  return user;
+export function getSessionUserId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const { userId, expiresAt } = JSON.parse(raw) as Session;
+    if (Date.now() > expiresAt) { clearSession(); return null; }
+    return userId;
+  } catch { return null; }
 }
 
 export function clearSession() {
   if (typeof window !== 'undefined') localStorage.removeItem(SESSION_KEY);
 }
 
-/* ── Users ── */
-export function getAllUsers(): StoredUser[] {
-  return load<StoredUser[]>(USERS_KEY, []);
+export async function loadSession(): Promise<StoredUser | null> {
+  const userId = getSessionUserId();
+  if (!userId) return null;
+  const users = await getAllUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) return null;
+  if (user.status === 'rejected' || user.status === 'suspended') { clearSession(); return null; }
+  if (user.status !== 'approved') return null;
+  return user;
 }
 
-export function registerUser(name: string, phone: string, password: string): StoredUser | 'exists' {
-  const users = getAllUsers();
+/* ── Users ── */
+export async function getAllUsers(): Promise<StoredUser[]> {
+  return kvGet<StoredUser[]>(USERS_KEY, []);
+}
+
+export async function registerUser(name: string, phone: string, password: string): Promise<StoredUser | 'exists'> {
+  const users = await getAllUsers();
   if (users.some((u) => u.phone === phone)) return 'exists';
   const user: StoredUser = {
     id: `u${Date.now()}`, name: name.trim(), phone, password, points: 0, status: 'pending',
   };
-  save(USERS_KEY, [...users, user]);
+  await kvSet(USERS_KEY, [...users, user]);
   return user;
 }
 
-export function loginUser(phone: string, password: string): StoredUser | 'pending' | 'rejected' | 'suspended' | null {
-  const user = getAllUsers().find((u) => u.phone === phone && u.password === password);
+export async function loginUser(phone: string, password: string): Promise<StoredUser | 'pending' | 'rejected' | 'suspended' | null> {
+  const users = await getAllUsers();
+  const user = users.find((u) => u.phone === phone && u.password === password);
   if (!user) return null;
   if (user.status === 'pending')   return 'pending';
   if (user.status === 'rejected')  return 'rejected';
@@ -88,118 +107,122 @@ export function loginUser(phone: string, password: string): StoredUser | 'pendin
   return user;
 }
 
-export function approveUser(uid: string) {
-  save(USERS_KEY, getAllUsers().map((u) => u.id === uid ? { ...u, status: 'approved' as UserStatus } : u));
+async function updateUserStatus(uid: string, status: UserStatus) {
+  const users = await getAllUsers();
+  await kvSet(USERS_KEY, users.map((u) => u.id === uid ? { ...u, status } : u));
 }
 
-export function rejectUser(uid: string) {
-  save(USERS_KEY, getAllUsers().map((u) => u.id === uid ? { ...u, status: 'rejected' as UserStatus } : u));
+export async function approveUser(uid: string)  { await updateUserStatus(uid, 'approved'); }
+export async function rejectUser(uid: string)   { await updateUserStatus(uid, 'rejected'); }
+export async function suspendUser(uid: string)  { await updateUserStatus(uid, 'suspended'); }
+
+export async function deleteUser(uid: string) {
+  const users = await getAllUsers();
+  await kvSet(USERS_KEY, users.filter((u) => u.id !== uid));
 }
 
-export function suspendUser(uid: string) {
-  save(USERS_KEY, getAllUsers().map((u) => u.id === uid ? { ...u, status: 'suspended' as UserStatus } : u));
-}
-
-export function deleteUser(uid: string) {
-  save(USERS_KEY, getAllUsers().filter((u) => u.id !== uid));
-}
-
-export function getLeaderboard(): StoredUser[] {
-  return getAllUsers().filter((u) => u.status === 'approved').sort((a, b) => b.points - a.points);
+export async function getLeaderboard(): Promise<StoredUser[]> {
+  const users = await getAllUsers();
+  return users.filter((u) => u.status === 'approved').sort((a, b) => b.points - a.points);
 }
 
 /* ── Competitions ── */
-export function getCompetitions(): Competition[] {
-  return load<Competition[]>(COMPS_KEY, []);
+export async function getCompetitions(): Promise<Competition[]> {
+  return kvGet<Competition[]>(COMPS_KEY, []);
 }
 
-export function getActiveCompetitions(): Competition[] {
-  return getCompetitions().filter((c) => c.active);
+export async function getActiveCompetitions(): Promise<Competition[]> {
+  return (await getCompetitions()).filter((c) => c.active);
 }
 
-export function addCompetition(comp: Competition) {
-  const existing = getCompetitions();
+export async function addCompetition(comp: Competition): Promise<void> {
+  const existing = await getCompetitions();
   if (existing.find((c) => c.id === comp.id)) {
-    save(COMPS_KEY, existing.map((c) => c.id === comp.id ? { ...comp, active: true } : c));
+    await kvSet(COMPS_KEY, existing.map((c) => c.id === comp.id ? { ...comp, active: true } : c));
   } else {
-    save(COMPS_KEY, [...existing, { ...comp, active: true }]);
+    await kvSet(COMPS_KEY, [...existing, { ...comp, active: true }]);
   }
 }
 
-export function removeCompetition(id: string) {
-  save(COMPS_KEY, getCompetitions().filter((c) => c.id !== id));
+export async function removeCompetition(id: string): Promise<void> {
+  await kvSet(COMPS_KEY, (await getCompetitions()).filter((c) => c.id !== id));
 }
 
-export function setCompetitionActive(id: string, active: boolean) {
-  save(COMPS_KEY, getCompetitions().map((c) => c.id === id ? { ...c, active } : c));
+export async function setCompetitionActive(id: string, active: boolean): Promise<void> {
+  await kvSet(COMPS_KEY, (await getCompetitions()).map((c) => c.id === id ? { ...c, active } : c));
 }
 
-/* ── Match Results (per competition) ── */
-export function getMatchResults(leagueId: string): MatchResult[] {
-  return load<MatchResult[]>(resultsKey(leagueId), []);
+/* ── Match Results ── */
+export async function getMatchResults(leagueId: string): Promise<MatchResult[]> {
+  return kvGet<MatchResult[]>(resultsKey(leagueId), []);
 }
 
-export function setMatchResult(leagueId: string, matchId: string, result: MatchOutcome) {
-  const rest = getMatchResults(leagueId).filter((r) => r.matchId !== matchId);
-  save(resultsKey(leagueId), [...rest, { matchId, result }]);
+export async function setMatchResult(leagueId: string, matchId: string, result: MatchOutcome): Promise<void> {
+  const rest = (await getMatchResults(leagueId)).filter((r) => r.matchId !== matchId);
+  await kvSet(resultsKey(leagueId), [...rest, { matchId, result }]);
 }
 
-export function clearMatchResult(leagueId: string, matchId: string) {
-  save(resultsKey(leagueId), getMatchResults(leagueId).filter((r) => r.matchId !== matchId));
+export async function clearMatchResult(leagueId: string, matchId: string): Promise<void> {
+  await kvSet(resultsKey(leagueId), (await getMatchResults(leagueId)).filter((r) => r.matchId !== matchId));
 }
 
-/* ── Predictions (per user, per competition) ── */
-export function getUserPredictions(uid: string, leagueId: string): UserPrediction[] {
-  return load<UserPrediction[]>(predsKey(uid, leagueId), []);
+/* ── Predictions ── */
+export async function getUserPredictions(uid: string, leagueId: string): Promise<UserPrediction[]> {
+  return kvGet<UserPrediction[]>(predsKey(uid, leagueId), []);
 }
 
-export function saveUserPredictions(uid: string, leagueId: string, preds: UserPrediction[]) {
-  save(predsKey(uid, leagueId), preds);
+export async function saveUserPredictions(uid: string, leagueId: string, preds: UserPrediction[]): Promise<void> {
+  await kvSet(predsKey(uid, leagueId), preds);
+}
+
+/* ── Manual Matches ── */
+export async function getManualMatches(leagueId: string): Promise<Match[]> {
+  return kvGet<Match[]>(manualMatchKey(leagueId), []);
+}
+
+export async function setManualMatches(leagueId: string, matches: Match[]): Promise<void> {
+  await kvSet(manualMatchKey(leagueId), matches);
+}
+
+export async function clearManualMatches(leagueId: string): Promise<void> {
+  await kvSet(manualMatchKey(leagueId), []);
 }
 
 /* ── Points ── */
-export function recalculateUserPoints(uid: string): StoredUser | null {
-  const users = getAllUsers();
+export async function recalculateUserPoints(uid: string): Promise<StoredUser | null> {
+  const users = await getAllUsers();
   const user  = users.find((u) => u.id === uid);
   if (!user) return null;
-  const points = getActiveCompetitions().reduce((total, comp) => {
-    const preds   = getUserPredictions(uid, comp.id);
-    const results = getMatchResults(comp.id);
-    return total + preds.reduce((sum, p) => {
+  const comps   = await getActiveCompetitions();
+  let points = 0;
+  for (const comp of comps) {
+    const preds   = await getUserPredictions(uid, comp.id);
+    const results = await getMatchResults(comp.id);
+    for (const p of preds) {
       const r = results.find((r) => r.matchId === p.matchId);
-      return r && p.prediction === r.result ? sum + 1 : sum;
-    }, 0);
-  }, 0);
+      if (r && p.prediction === r.result) points++;
+    }
+  }
   const updated = { ...user, points };
-  save(USERS_KEY, users.map((u) => u.id === uid ? updated : u));
+  await kvSet(USERS_KEY, users.map((u) => u.id === uid ? updated : u));
   return updated;
 }
 
-/* ── Manual Matches (per competition) ── */
-export function getManualMatches(leagueId: string): Match[] {
-  return load<Match[]>(manualMatchKey(leagueId), []);
-}
-
-export function setManualMatches(leagueId: string, matches: Match[]) {
-  save(manualMatchKey(leagueId), matches);
-}
-
-export function clearManualMatches(leagueId: string) {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(manualMatchKey(leagueId));
-}
-
-export function recalculateAllPoints() {
-  const competitions = getActiveCompetitions();
-  save(USERS_KEY, getAllUsers().map((u) => {
-    const points = competitions.reduce((total, comp) => {
-      const preds   = getUserPredictions(u.id, comp.id);
-      const results = getMatchResults(comp.id);
-      return total + preds.reduce((sum, p) => {
+export async function recalculateAllPoints(): Promise<void> {
+  const users = await getAllUsers();
+  const comps = await getActiveCompetitions();
+  const updated: StoredUser[] = [];
+  for (const user of users) {
+    let points = 0;
+    for (const comp of comps) {
+      const preds   = await getUserPredictions(user.id, comp.id);
+      const results = await getMatchResults(comp.id);
+      for (const p of preds) {
         const r = results.find((r) => r.matchId === p.matchId);
-        return r && p.prediction === r.result ? sum + 1 : sum;
-      }, 0);
-    }, 0);
-    return { ...u, points };
-  }));
+        if (r && p.prediction === r.result) points++;
+      }
+    }
+    updated.push({ ...user, points });
+  }
+  await kvSet(USERS_KEY, updated);
 }
