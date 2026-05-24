@@ -777,21 +777,23 @@ body {
 
 .league-search-row {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 10px;
 }
 .league-search-input {
-  flex: 1;
-  padding: 11px 14px;
+  width: 100%;
+  padding: 13px 14px;
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 0.88rem;
   outline: none;
+  font-family: inherit;
 }
 .league-search-input:focus { border-color: var(--green); }
-.league-search-btn { padding: 11px 16px; flex-shrink: 0; }
+.league-search-btn { width: 100%; padding: 12px; margin-top: 0; }
 
 .league-result-row {
   display: flex;

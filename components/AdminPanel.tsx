@@ -214,18 +214,14 @@ export default function AdminPanel() {
     refreshResults(id);
   };
 
-  // ── النتائج ──
+  // ── النتائج (مع احتساب تلقائي للنقاط) ──
   const handleResult = (matchId: string, outcome: MatchOutcome) => {
     const existing = results.find((r) => r.matchId === matchId)?.result;
     if (existing === outcome) clearMatchResult(selComp, matchId);
     else setMatchResult(selComp, matchId, outcome);
     refreshResults(selComp);
-  };
-
-  const handleRecalc = () => {
     recalculateAllPoints();
     refreshUsers();
-    flash('تم احتساب النقاط لجميع الأعضاء ✓');
   };
 
   const handleAutoFetch = async () => {
@@ -245,7 +241,9 @@ export default function AdminPanel() {
         if (match) { setMatchResult(selComp, match.id, r.outcome); count++; }
       }
       refreshResults(selComp);
-      flash(count > 0 ? `✓ تم جلب ${count} نتيجة وتحديثها` : 'لا توجد نتائج مطابقة للمباريات الحالية');
+      recalculateAllPoints();
+      refreshUsers();
+      flash(count > 0 ? `✓ تم جلب ${count} نتيجة وتحديث النقاط` : 'لا توجد نتائج مطابقة للمباريات الحالية');
     } catch {
       flash('فشل الاتصال — تحقق من الاتصال بالإنترنت');
     }
@@ -513,14 +511,9 @@ export default function AdminPanel() {
           })
         )}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button className="btn-primary" style={{ flex: 1 }} onClick={handleAutoFetch} disabled={!selComp}>
-            🔄 جلب النتائج تلقائياً
-          </button>
-          <button className="btn-primary" style={{ flex: 1 }} onClick={handleRecalc}>
-            🧮 احتساب النقاط
-          </button>
-        </div>
+        <button className="btn-primary" style={{ marginTop: 12 }} onClick={handleAutoFetch} disabled={!selComp}>
+          🔄 جلب النتائج تلقائياً من API
+        </button>
       </div>
 
       {/* ── الأعضاء المعتمدون ── */}
