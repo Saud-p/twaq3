@@ -916,6 +916,61 @@ body {
 
 .comp-manage-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* ── Pending Requests Alert ── */
+.pending-alert {
+  margin: 8px 14px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.06) 100%);
+  border: 1.5px solid rgba(245,158,11,0.4);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(245,158,11,0.4); box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+  50%       { border-color: rgba(245,158,11,0.7); box-shadow: 0 0 0 4px rgba(245,158,11,0.08); }
+}
+
+.pending-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.pending-alert-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.pending-alert-list { display: flex; flex-direction: column; gap: 8px; }
+
+.pending-alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.pending-alert-info { display: flex; flex-direction: column; gap: 2px; }
+.pending-alert-name  { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+.pending-alert-phone { font-size: 0.75rem; color: var(--text-muted); }
+
+.pending-alert-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 /* ── Logout Button ── */
 .btn-logout {
   width: 34px;

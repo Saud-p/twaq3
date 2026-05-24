@@ -106,6 +106,7 @@ export default function MatchPredictionApp() {
   };
 
   const handleLogout = () => {
+    if (!window.confirm('هل تريد تسجيل الخروج؟')) return;
     clearSession();
     setUser(null);
     setPBC({});

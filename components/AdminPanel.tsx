@@ -293,6 +293,7 @@ export default function AdminPanel() {
         </div>
         <button className="btn-logout admin-logout" title="تسجيل الخروج"
           onClick={() => {
+            if (!window.confirm('هل تريد تسجيل الخروج من لوحة التحكم؟')) return;
             localStorage.removeItem(ADMIN_SESSION);
             setAuthed(false);
             setPass('');
@@ -300,6 +301,38 @@ export default function AdminPanel() {
           ⏻
         </button>
       </header>
+
+      {/* ── إشعار الطلبات المعلّقة ── */}
+      {pending.length > 0 && (
+        <div className="pending-alert">
+          <div className="pending-alert-title">
+            <span className="pending-alert-dot" />
+            {pending.length === 1
+              ? `طلب تسجيل جديد من ${pending[0].name}`
+              : `${pending.length} طلبات تسجيل جديدة تنتظر المراجعة`}
+          </div>
+          <div className="pending-alert-list">
+            {pending.map((u) => (
+              <div key={u.id} className="pending-alert-row">
+                <div className="pending-alert-info">
+                  <span className="pending-alert-name">{u.name}</span>
+                  <span className="pending-alert-phone">{u.phone}</span>
+                </div>
+                <div className="pending-alert-actions">
+                  <button className="btn-approve"
+                    onClick={() => { approveUser(u.id); refreshUsers(); flash(`✓ تم قبول ${u.name}`); }}>
+                    ✓ قبول
+                  </button>
+                  <button className="btn-reject"
+                    onClick={() => { rejectUser(u.id); refreshUsers(); flash(`تم رفض ${u.name}`); }}>
+                    ✗ رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {msg && <div className="status-msg">{msg}</div>}
 
