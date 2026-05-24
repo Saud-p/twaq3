@@ -5,10 +5,19 @@ import type { Match, MatchOutcome } from '../lib/matches';
 import {
   getAllUsers, approveUser, rejectUser,
   getMatchResults, setMatchResult, clearMatchResult, recalculateAllPoints,
+  getLeagueConfig, setLeagueConfig, LeagueConfig,
 } from '../lib/storage';
 import type { StoredUser, MatchResult } from '../lib/storage';
 
 const ADMIN_PASS = 'Saud&Fahad=Heart';
+
+type LeagueResult = {
+  id:      number;
+  name:    string;
+  country: string;
+  logo:    string;
+  seasons: number[];
+};
 
 export default function AdminPanel() {
   const [authed,   setAuthed]  = useState(false);
@@ -20,17 +29,35 @@ export default function AdminPanel() {
   const [loadingM, setLoadingM]= useState(false);
   const [msg,      setMsg]     = useState('');
 
+  // إعداد البطولة
+  const [leagueCfg,      setLeagueCfg]      = useState<LeagueConfig | null>(null);
+  const [leagueSearch,   setLeagueSearch]   = useState('');
+  const [leagueResults,  setLeagueResults]  = useState<LeagueResult[]>([]);
+  const [leagueLoading,  setLeagueLoading]  = useState(false);
+  const [selectedLeague, setSelectedLeague] = useState<LeagueResult | null>(null);
+  const [selectedSeason, setSelectedSeason] = useState('');
+  const [shareUrl,       setShareUrl]       = useState('');
+
   const refresh = () => { setUsers(getAllUsers()); setResults(getMatchResults()); };
 
-  useEffect(() => {
-    if (!authed) return;
-    refresh();
+  const loadMatches = (cfg: LeagueConfig | null) => {
     setLoadingM(true);
-    fetch('/api/upcoming')
+    const url = cfg
+      ? `/api/upcoming?league=${cfg.leagueId}&season=${cfg.season}`
+      : '/api/upcoming';
+    fetch(url)
       .then((r) => r.json())
       .then((data) => { if (data.fixtures) setMatches(data.fixtures); })
       .catch(() => {})
       .finally(() => setLoadingM(false));
+  };
+
+  useEffect(() => {
+    if (!authed) return;
+    refresh();
+    const cfg = getLeagueConfig();
+    setLeagueCfg(cfg);
+    loadMatches(cfg);
   }, [authed]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -57,9 +84,13 @@ export default function AdminPanel() {
   };
 
   const handleAutoFetch = async () => {
+    const cfg      = getLeagueConfig();
+    const fetchUrl = cfg
+      ? `/api/fetch-results?league=${cfg.leagueId}&season=${cfg.season}`
+      : '/api/fetch-results';
     setMsg('جاري جلب النتائج من API...');
     try {
-      const res  = await fetch('/api/fetch-results');
+      const res  = await fetch(fetchUrl);
       const data = await res.json() as { results?: { id: string; home: string; away: string; date: string; outcome: MatchOutcome }[]; error?: string };
       if (data.error) { setMsg(`خطأ: ${data.error}`); return; }
 
@@ -76,6 +107,58 @@ export default function AdminPanel() {
       setMsg('فشل الاتصال — تحقق من الاتصال بالإنترنت');
       setTimeout(() => setMsg(''), 4000);
     }
+  };
+
+  // ── إعداد البطولة ──
+  const handleLeagueSearch = async () => {
+    if (leagueSearch.trim().length < 2) return;
+    setLeagueLoading(true);
+    setLeagueResults([]);
+    setSelectedLeague(null);
+    setShareUrl('');
+    try {
+      const res  = await fetch(`/api/search-leagues?q=${encodeURIComponent(leagueSearch.trim())}`);
+      const data = await res.json();
+      setLeagueResults(data.leagues ?? []);
+      if (!data.leagues?.length) setMsg('لا توجد نتائج — جرب كلمة أخرى');
+    } catch {
+      setMsg('فشل البحث — تحقق من الاتصال');
+    } finally {
+      setLeagueLoading(false);
+      setTimeout(() => setMsg(''), 3000);
+    }
+  };
+
+  const handleLeaguePick = (lg: LeagueResult) => {
+    setSelectedLeague(lg);
+    setSelectedSeason(String(lg.seasons[0] ?? ''));
+    setShareUrl('');
+  };
+
+  const handleLeagueConfirm = () => {
+    if (!selectedLeague || !selectedSeason) return;
+    const config: LeagueConfig = {
+      leagueId:    String(selectedLeague.id),
+      season:      selectedSeason,
+      leagueName:  selectedLeague.name,
+      countryName: selectedLeague.country,
+    };
+    setLeagueConfig(config);
+    setLeagueCfg(config);
+    loadMatches(config);
+
+    const base   = window.location.origin;
+    const qs     = new URLSearchParams({
+      league: config.leagueId,
+      season: config.season,
+      lname:  config.leagueName,
+      cname:  config.countryName,
+    });
+    setShareUrl(`${base}/?${qs.toString()}`);
+    setLeagueResults([]);
+    setSelectedLeague(null);
+    setMsg('✓ تم حفظ المسابقة');
+    setTimeout(() => setMsg(''), 3000);
   };
 
   if (!authed) {
@@ -116,6 +199,81 @@ export default function AdminPanel() {
 
       {msg && <div className="status-msg">{msg}</div>}
 
+      {/* ── إعداد المسابقة ── */}
+      <div className="section">
+        <h2 className="section-title">
+          <span className="icon">🏆</span>
+          إعداد المسابقة
+        </h2>
+        <div className="divider" />
+
+        {leagueCfg && (
+          <div className="league-current">
+            <div className="league-current-label">المسابقة الحالية</div>
+            <div className="league-current-name">{leagueCfg.leagueName}</div>
+            <div className="league-current-sub">{leagueCfg.countryName} · موسم {leagueCfg.season}</div>
+          </div>
+        )}
+
+        <div className="league-search-row">
+          <input
+            className="league-search-input"
+            placeholder="ابحث عن بطولة... (مثال: Saudi, Premier, Champions)"
+            value={leagueSearch}
+            onChange={(e) => setLeagueSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLeagueSearch()}
+          />
+          <button className="btn-primary league-search-btn"
+            onClick={handleLeagueSearch} disabled={leagueLoading}>
+            {leagueLoading ? '...' : '🔍'}
+          </button>
+        </div>
+
+        {leagueResults.map((lg) => (
+          <div key={lg.id} className={`league-result-row${selectedLeague?.id === lg.id ? ' selected' : ''}`}
+            onClick={() => handleLeaguePick(lg)}>
+            {lg.logo && <img src={lg.logo} alt="" className="league-logo" />}
+            <div>
+              <div className="league-result-name">{lg.name}</div>
+              <div className="league-result-country">{lg.country}</div>
+            </div>
+          </div>
+        ))}
+
+        {selectedLeague && (
+          <div style={{ marginTop: 12 }}>
+            <div className="league-season-label">اختر الموسم:</div>
+            <div className="league-seasons">
+              {selectedLeague.seasons.map((yr) => (
+                <button key={yr} onClick={() => setSelectedSeason(String(yr))}
+                  className={`season-btn${selectedSeason === String(yr) ? ' active' : ''}`}>
+                  {yr}
+                </button>
+              ))}
+            </div>
+            <button className="btn-primary" style={{ marginTop: 10 }} onClick={handleLeagueConfirm}>
+              ✓ تأكيد وحفظ المسابقة
+            </button>
+          </div>
+        )}
+
+        {shareUrl && (
+          <div className="share-url-box">
+            <div className="share-url-label">أرسل هذا الرابط للمشتركين لتطبيق المسابقة عندهم:</div>
+            <div className="share-url-row">
+              <input readOnly value={shareUrl} className="share-url-input"
+                onFocus={(e) => e.currentTarget.select()} />
+              <button className="btn-primary" style={{ padding: '8px 14px', flexShrink: 0 }}
+                onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {
+                  setMsg('تم نسخ الرابط ✓'); setTimeout(() => setMsg(''), 2000);
+                })}>
+                نسخ
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── طلبات التسجيل ── */}
       <div className="section">
         <h2 className="section-title">
@@ -151,7 +309,7 @@ export default function AdminPanel() {
         {loadingM ? (
           <p className="empty-msg">جاري تحميل المباريات...</p>
         ) : matches.length === 0 ? (
-          <p className="empty-msg">لا توجد مباريات قادمة حالياً</p>
+          <p className="empty-msg">لا توجد مباريات — حدد مسابقة أولاً</p>
         ) : null}
         {matches.map((match) => {
           const stored = results.find((r) => r.matchId === match.id)?.result ?? null;
@@ -227,7 +385,6 @@ export default function AdminPanel() {
         }
       </div>
 
-      {/* ── المرفوضون ── */}
       {rejected.length > 0 && (
         <div className="section">
           <h2 className="section-title"><span className="icon">🚫</span>مرفوضون ({rejected.length})</h2>

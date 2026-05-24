@@ -9,6 +9,7 @@ import {
   StoredUser, UserPrediction, MatchResult,
   getLeaderboard, getUserPredictions, saveUserPredictions,
   getMatchResults, saveSession, loadSession, recalculateUserPoints,
+  getLeagueConfig, setLeagueConfig,
 } from '../lib/storage';
 
 export default function MatchPredictionApp() {
@@ -33,7 +34,26 @@ export default function MatchPredictionApp() {
       setPreds(getUserPredictions(saved.id));
     }
 
-    fetch('/api/upcoming')
+    // استيراد إعداد البطولة من رابط المشاركة (إن وُجد)
+    const params  = new URLSearchParams(window.location.search);
+    const pLeague = params.get('league');
+    const pSeason = params.get('season');
+    if (pLeague && pSeason) {
+      setLeagueConfig({
+        leagueId:    pLeague,
+        season:      pSeason,
+        leagueName:  params.get('lname') ?? '',
+        countryName: params.get('cname') ?? '',
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    const cfg      = getLeagueConfig();
+    const fetchUrl = cfg
+      ? `/api/upcoming?league=${cfg.leagueId}&season=${cfg.season}`
+      : '/api/upcoming';
+
+    fetch(fetchUrl)
       .then((r) => r.json())
       .then((data) => { if (data.fixtures) setMatches(data.fixtures); })
       .catch(() => {})

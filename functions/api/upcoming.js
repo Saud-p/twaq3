@@ -1,5 +1,4 @@
 const API_KEY = '0bf21070f58c68ad655959915f01c5fb';
-const LEAGUE  = 307; // Saudi Pro League
 
 const TEAM_MAP = {
   'Al Hilal':     'الهلال',
@@ -36,16 +35,20 @@ function mapTeam(name) {
   return TEAM_MAP[name] || name;
 }
 
-export async function onRequestGet() {
+export async function onRequestGet(context) {
+  const url    = new URL(context.request.url);
+  const league = url.searchParams.get('league') || '307';
+  const season = url.searchParams.get('season') || '2025';
+
   try {
     const res = await fetch(
-      `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=2025&status=NS&next=10`,
+      `https://v3.football.api-sports.io/fixtures?league=${league}&season=${season}&status=NS&next=10`,
       { headers: { 'x-apisports-key': API_KEY } }
     );
 
     if (!res.ok) return Response.json({ error: `API error ${res.status}` }, { status: 502 });
 
-    const data = await res.json();
+    const data     = await res.json();
     const fixtures = (data.response || []).map((item) => ({
       id:   String(item.fixture.id),
       home: mapTeam(item.teams.home.name),

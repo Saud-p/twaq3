@@ -25,7 +25,23 @@ export type MatchResult = {
 const USERS_KEY   = 'twaq3_users';
 const RESULTS_KEY = 'twaq3_results';
 const SESSION_KEY = 'twaq3_session';
+const LEAGUE_KEY  = 'twaq3_league';
 const predsKey    = (uid: string) => `twaq3_preds_${uid}`;
+
+export type LeagueConfig = {
+  leagueId:    string;
+  season:      string;
+  leagueName:  string;
+  countryName: string;
+};
+
+export function getLeagueConfig(): LeagueConfig | null {
+  return load<LeagueConfig | null>(LEAGUE_KEY, null);
+}
+
+export function setLeagueConfig(config: LeagueConfig) {
+  save(LEAGUE_KEY, config);
+}
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
