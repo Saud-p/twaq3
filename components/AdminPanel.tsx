@@ -9,10 +9,27 @@ import {
 } from '../lib/storage';
 import type { StoredUser, MatchResult, Competition } from '../lib/storage';
 
-const ADMIN_PASS = 'Saud&Fahad=Heart';
+const ADMIN_PASS    = 'Saud&Fahad=Heart';
+const ADMIN_SESSION = 'twaq3_admin_session';
+
+function isAdminSessionValid(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION);
+    if (!raw) return false;
+    const { expiresAt } = JSON.parse(raw) as { expiresAt: number };
+    return Date.now() < expiresAt;
+  } catch { return false; }
+}
+
+function saveAdminSession() {
+  localStorage.setItem(ADMIN_SESSION, JSON.stringify({
+    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+  }));
+}
 
 export default function AdminPanel() {
-  const [authed,   setAuthed]  = useState(false);
+  const [authed,   setAuthed]  = useState(() => isAdminSessionValid());
   const [pass,     setPass]    = useState('');
   const [passErr,  setPassErr] = useState(false);
   const [users,    setUsers]   = useState<StoredUser[]>([]);
@@ -62,7 +79,7 @@ export default function AdminPanel() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pass === ADMIN_PASS) { setAuthed(true); setPassErr(false); }
+    if (pass === ADMIN_PASS) { saveAdminSession(); setAuthed(true); setPassErr(false); }
     else setPassErr(true);
   };
 
