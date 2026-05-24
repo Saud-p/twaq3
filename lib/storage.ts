@@ -1,4 +1,4 @@
-import type { MatchOutcome } from './matches';
+import type { Match, MatchOutcome } from './matches';
 
 export type UserStatus = 'pending' | 'approved' | 'rejected';
 
@@ -23,11 +23,12 @@ export type Competition = {
   active: boolean;
 };
 
-const USERS_KEY   = 'twaq3_users';
-const SESSION_KEY = 'twaq3_session';
-const COMPS_KEY   = 'twaq3_competitions';
-const resultsKey  = (lid: string) => `twaq3_r_${lid}`;
-const predsKey    = (uid: string, lid: string) => `twaq3_p_${uid}_${lid}`;
+const USERS_KEY      = 'twaq3_users';
+const SESSION_KEY    = 'twaq3_session';
+const COMPS_KEY      = 'twaq3_competitions';
+const resultsKey     = (lid: string) => `twaq3_r_${lid}`;
+const predsKey       = (uid: string, lid: string) => `twaq3_p_${uid}_${lid}`;
+const manualMatchKey = (lid: string) => `twaq3_manual_${lid}`;
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
 type Session = { userId: string; expiresAt: number };
@@ -163,6 +164,20 @@ export function recalculateUserPoints(uid: string): StoredUser | null {
   const updated = { ...user, points };
   save(USERS_KEY, users.map((u) => u.id === uid ? updated : u));
   return updated;
+}
+
+/* ── Manual Matches (per competition) ── */
+export function getManualMatches(leagueId: string): Match[] {
+  return load<Match[]>(manualMatchKey(leagueId), []);
+}
+
+export function setManualMatches(leagueId: string, matches: Match[]) {
+  save(manualMatchKey(leagueId), matches);
+}
+
+export function clearManualMatches(leagueId: string) {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(manualMatchKey(leagueId));
 }
 
 export function recalculateAllPoints() {

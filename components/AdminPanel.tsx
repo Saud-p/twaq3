@@ -6,6 +6,7 @@ import {
   getAllUsers, approveUser, rejectUser,
   getMatchResults, setMatchResult, clearMatchResult, recalculateAllPoints,
   getCompetitions, addCompetition, removeCompetition, setCompetitionActive,
+  getManualMatches, setManualMatches, clearManualMatches,
 } from '../lib/storage';
 import type { StoredUser, MatchResult, Competition } from '../lib/storage';
 
@@ -42,6 +43,11 @@ export default function AdminPanel() {
   const [lookupLoading, setLL]       = useState(false);
   const [shareUrl,     setShareUrl]  = useState('');
 
+  // الإدخال اليدوي
+  const [manualText,    setManualText]    = useState('');
+  const [manualParsed,  setManualParsed]  = useState<Match[]>([]);
+  const [manualSaved,   setManualSaved]   = useState(false);
+
   // النتائج
   const [selComp,    setSelComp]  = useState<string>('');
   const [matches,    setMatches]  = useState<Match[]>([]);
@@ -49,6 +55,30 @@ export default function AdminPanel() {
   const [loadingM,   setLoadingM] = useState(false);
 
   const flash = (m: string, t = 3500) => { setMsg(m); setTimeout(() => setMsg(''), t); };
+
+  function parseMatchText(text: string): Match[] {
+    const blocks = text.trim().split(/\n\s*\n/);
+    const parsed: Match[] = [];
+    for (const block of blocks) {
+      const lines = block.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length < 2) continue;
+      // السطر الأول يبدأ بأرقام (التاريخ)، السطر التالي هو الفريقان
+      const dateLine = lines.find((l) => /^\d/.test(l)) ?? '';
+      const teamLine = lines.find((l) => /^[؀-ۿa-zA-Z]/.test(l)) ?? '';
+      if (!teamLine) continue;
+      // الفصل بين الفريقين بـ " - "
+      const sep = teamLine.lastIndexOf(' - ');
+      if (sep === -1) continue;
+      const home = teamLine.slice(0, sep).trim();
+      const away = teamLine.slice(sep + 3).trim();
+      if (!home || !away) continue;
+      // معرّف ثابت بناءً على محتوى المباراة
+      let h = 0;
+      for (const c of `${home}|${away}|${dateLine}`) { h = ((h << 5) - h + c.charCodeAt(0)) | 0; }
+      parsed.push({ id: `m${Math.abs(h).toString(36)}`, home, away, date: dateLine });
+    }
+    return parsed;
+  }
 
   const refreshComps = () => {
     const comps = getCompetitions();
@@ -74,7 +104,13 @@ export default function AdminPanel() {
     refreshUsers();
     const comps = refreshComps();
     const first = comps.find((c) => c.active);
-    if (first) { setSelComp(first.id); loadMatchesFor(first.id); refreshResults(first.id); }
+    if (first) {
+      setSelComp(first.id);
+      refreshResults(first.id);
+      const saved = getManualMatches(first.id);
+      if (saved.length) { setMatches(saved); setManualParsed(saved); setManualSaved(true); }
+      else loadMatchesFor(first.id);
+    }
   }, [authed]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -133,10 +169,48 @@ export default function AdminPanel() {
     setShareUrl(url);
   };
 
+  // ── الإدخال اليدوي ──
+  const handleParseManual = () => {
+    const parsed = parseMatchText(manualText);
+    setManualParsed(parsed);
+    setManualSaved(false);
+    if (!parsed.length) flash('لم يتم التعرف على أي مباراة — تحقق من الصيغة');
+  };
+
+  const handleSaveManual = () => {
+    if (!selComp) { flash('اختر بطولة أولاً'); return; }
+    if (!manualParsed.length) { flash('لا توجد مباريات للحفظ — اضغط "معاينة" أولاً'); return; }
+    setManualMatches(selComp, manualParsed);
+    setMatches(manualParsed);
+    setManualSaved(true);
+    flash(`✓ تم حفظ ${manualParsed.length} مباراة يدوياً`);
+  };
+
+  const handleClearManual = () => {
+    if (!selComp) return;
+    clearManualMatches(selComp);
+    setManualText('');
+    setManualParsed([]);
+    setManualSaved(false);
+    loadMatchesFor(selComp);
+    flash('تم مسح المباريات اليدوية — جاري التحميل من API');
+  };
+
   // ── تبديل البطولة في قسم النتائج ──
   const handleSelComp = (id: string) => {
     setSelComp(id);
-    loadMatchesFor(id);
+    // تحميل النص اليدوي المحفوظ إن وجد
+    const saved = getManualMatches(id);
+    if (saved.length) {
+      setMatches(saved);
+      setManualParsed(saved);
+      setManualSaved(true);
+    } else {
+      loadMatchesFor(id);
+      setManualParsed([]);
+      setManualSaved(false);
+    }
+    setManualText('');
     refreshResults(id);
   };
 
@@ -295,6 +369,66 @@ export default function AdminPanel() {
               </button>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* ── إدخال المباريات يدوياً ── */}
+      <div className="section">
+        <h2 className="section-title"><span className="icon">✏️</span>إدخال المباريات يدوياً</h2>
+        <div className="divider" />
+
+        {activeComps.length > 1 && (
+          <div style={{ marginBottom: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            البطولة المحددة: <strong style={{ color: 'var(--green)' }}>
+              {competitions.find((c) => c.id === selComp)?.name ?? selComp}
+            </strong>
+          </div>
+        )}
+
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.7 }}>
+          الصيغة: التاريخ والوقت في السطر الأول، ثم اسم الفريق الأول - اسم الفريق الثاني
+        </div>
+
+        <textarea
+          className="manual-matches-input"
+          placeholder={`11/06/26 - 10:00 م\nالمكسيك - جنوب أفريقيا\n\n12/06/26 - 05:00 ص\nكوريا الجنوبية - جمهورية التشيك`}
+          value={manualText}
+          onChange={(e) => { setManualText(e.target.value); setManualParsed([]); setManualSaved(false); }}
+          rows={10}
+          dir="rtl"
+        />
+
+        {manualParsed.length > 0 && (
+          <div className="manual-preview">
+            <div className="manual-preview-title">معاينة — {manualParsed.length} مباريات:</div>
+            {manualParsed.map((m, i) => (
+              <div key={m.id} className="manual-preview-row">
+                <span className="manual-preview-num">{i + 1}</span>
+                <span>{m.home}</span>
+                <span className="manual-preview-vs">vs</span>
+                <span>{m.away}</span>
+                <span className="manual-preview-date">{m.date}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={handleParseManual}
+            disabled={!manualText.trim()}>
+            👁️ معاينة
+          </button>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={handleSaveManual}
+            disabled={!manualParsed.length || manualSaved}>
+            {manualSaved ? '✓ محفوظ' : '💾 حفظ'}
+          </button>
+        </div>
+
+        {manualSaved && (
+          <button className="btn-reject" style={{ width: '100%', marginTop: 8, padding: '10px' }}
+            onClick={handleClearManual}>
+            🗑️ مسح وإعادة الجلب من API
+          </button>
         )}
       </div>
 

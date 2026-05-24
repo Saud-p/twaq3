@@ -9,7 +9,7 @@ import {
   StoredUser, UserPrediction, MatchResult, Competition,
   getLeaderboard, getUserPredictions, saveUserPredictions,
   getMatchResults, saveSession, loadSession, recalculateUserPoints,
-  getActiveCompetitions, addCompetition,
+  getActiveCompetitions, addCompetition, getManualMatches,
 } from '../lib/storage';
 
 export default function MatchPredictionApp() {
@@ -27,6 +27,12 @@ export default function MatchPredictionApp() {
   const refreshLb = () => setLb(getLeaderboard());
 
   const fetchMatches = (comp: Competition) => {
+    // الأولوية للمباريات اليدوية المحفوظة
+    const manual = getManualMatches(comp.id);
+    if (manual.length > 0) {
+      setMBC((prev) => ({ ...prev, [comp.id]: manual }));
+      return;
+    }
     setLoading((s) => new Set(s).add(comp.id));
     fetch(`/api/upcoming?league=${comp.id}`)
       .then((r) => r.json())
