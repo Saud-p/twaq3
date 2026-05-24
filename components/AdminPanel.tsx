@@ -11,7 +11,7 @@ import {
 import type { StoredUser, MatchResult, Competition } from '../lib/storage';
 
 const ADMIN_PASS    = 'Saud&Fahad=Heart';
-const ADMIN_SESSION = 'twaq3_admin_session';
+const ADMIN_SESSION  = 'twaq3_admin_session';
 
 function isAdminSessionValid(): boolean {
   if (typeof window === 'undefined') return false;
@@ -285,12 +285,20 @@ export default function AdminPanel() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
+      <header className="app-header" style={{ position: 'relative' }}>
         <div className="logo-fallback" style={{ display: 'flex' }}>
           <span className="logo-icon">⚙️</span>
           <span className="logo-title">لوحة التحكم</span>
           <span className="logo-subtitle">ADMIN PANEL</span>
         </div>
+        <button className="btn-logout admin-logout" title="تسجيل الخروج"
+          onClick={() => {
+            localStorage.removeItem(ADMIN_SESSION);
+            setAuthed(false);
+            setPass('');
+          }}>
+          ⏻
+        </button>
       </header>
 
       {msg && <div className="status-msg">{msg}</div>}
