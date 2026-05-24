@@ -123,7 +123,22 @@ export function clearMatchResult(matchId: string) {
   save(RESULTS_KEY, getMatchResults().filter((r) => r.matchId !== matchId));
 }
 
-/* ── Points Recalculation (called by admin after setting results) ── */
+/* ── Points Recalculation ── */
+
+export function recalculateUserPoints(uid: string): StoredUser | null {
+  const users   = getAllUsers();
+  const user    = users.find((u) => u.id === uid);
+  if (!user) return null;
+  const preds   = getUserPredictions(uid);
+  const results = getMatchResults();
+  const points  = preds.reduce((sum, p) => {
+    const r = results.find((r) => r.matchId === p.matchId);
+    return r && p.prediction === r.result ? sum + 1 : sum;
+  }, 0);
+  const updated = { ...user, points };
+  save(USERS_KEY, users.map((u) => (u.id === uid ? updated : u)));
+  return updated;
+}
 
 export function recalculateAllPoints() {
   const users  = getAllUsers();

@@ -8,7 +8,7 @@ import { Match, MatchOutcome } from '../lib/matches';
 import {
   StoredUser, UserPrediction, MatchResult,
   getLeaderboard, getUserPredictions, saveUserPredictions,
-  getMatchResults, saveSession, loadSession,
+  getMatchResults, saveSession, loadSession, recalculateUserPoints,
 } from '../lib/storage';
 
 export default function MatchPredictionApp({ initialMatches }: { initialMatches: Match[] }) {
@@ -16,7 +16,7 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
   const [predictions, setPreds]   = useState<UserPrediction[]>([]);
   const [leaderboard, setLb]      = useState<StoredUser[]>([]);
   const [matchResults, setResults]= useState<MatchResult[]>([]);
-  const [status, setStatus]       = useState('');
+  const [saveModal, setSaveModal] = useState<{ count: number; points: number } | null>(null);
 
   const refreshAll = () => {
     setLb(getLeaderboard());
@@ -25,7 +25,6 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
 
   useEffect(() => {
     refreshAll();
-    // استعادة الجلسة المحفوظة
     const saved = loadSession();
     if (saved) {
       setUser(saved);
@@ -49,11 +48,16 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
   };
 
   const handleSave = useCallback(() => {
-    if (!user)               { setStatus('يرجى تسجيل الدخول أولاً'); return; }
-    if (!predictions.length) { setStatus('اختر توقعاتك أولاً'); return; }
+    if (!user || !predictions.length) return;
 
     saveUserPredictions(user.id, predictions);
-    setStatus('تم حفظ توقعاتك ✓');
+
+    // احتساب النقاط فوراً بناءً على النتائج المتوفرة
+    const updated = recalculateUserPoints(user.id);
+    if (updated) setUser(updated);
+
+    refreshAll();
+    setSaveModal({ count: predictions.length, points: updated?.points ?? user.points });
   }, [user, predictions]);
 
   const userRank = user ? leaderboard.findIndex((u) => u.id === user.id) + 1 : 0;
@@ -77,8 +81,6 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
           <span className="logo-subtitle">PREDICTION LEAGUE</span>
         </div>
       </header>
-
-      {status && <div className="status-msg">{status}</div>}
 
       {!user ? (
         <LoginForm onAuth={handleAuth} />
@@ -105,11 +107,34 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
         disabled={!user}
       />
 
-      <button className="btn-save" onClick={handleSave} disabled={!user}>
+      <button className="btn-save" onClick={handleSave} disabled={!user || !predictions.length}>
         {user ? '💾 حفظ التوقعات' : '🔒 سجّل دخولك أولاً'}
       </button>
 
       <Leaderboard currentUserId={user?.id ?? null} users={leaderboard} />
+
+      {/* مودال تأكيد الحفظ */}
+      {saveModal && (
+        <div className="save-overlay" onClick={() => setSaveModal(null)}>
+          <div className="save-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="save-modal-icon">✅</div>
+            <h2 className="save-modal-title">تم حفظ توقعاتك!</h2>
+            <p className="save-modal-sub">
+              حفظنا <strong>{saveModal.count}</strong> توقع بنجاح
+            </p>
+            <p className="save-modal-sub">
+              ستحصل على نقطة لكل توقع صحيح بعد انتهاء المباريات
+            </p>
+            <div className="save-modal-points">
+              <span className="save-modal-pts-val">{saveModal.points}</span>
+              <span className="save-modal-pts-label">مجموع نقاطك الحالي</span>
+            </div>
+            <button className="btn-primary save-modal-btn" onClick={() => setSaveModal(null)}>
+              حسناً
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
