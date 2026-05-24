@@ -26,6 +26,7 @@ export async function onRequestGet(context) {
       home: mapTeam(e.strHomeTeam),
       away: mapTeam(e.strAwayTeam),
       date: e.dateEvent ?? '',
+      time: e.strTime    ?? '',
     }));
 
     return Response.json({ fixtures });

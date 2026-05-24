@@ -5,4 +5,5 @@ export type Match = {
   home: string;
   away: string;
   date: string;
+  time?: string; // وقت UTC من TheSportsDB أو فارغ للمباريات اليدوية
 };

@@ -102,6 +102,13 @@ export default function AdminPanel() {
   useEffect(() => {
     if (!authed) return;
     refreshUsers();
+    // مراقبة طلبات التسجيل الجديدة كل 30 ثانية
+    const iv = setInterval(refreshUsers, 30_000);
+    return () => clearInterval(iv);
+  }, [authed]);
+
+  useEffect(() => {
+    if (!authed) return;
     const comps = refreshComps();
     const first = comps.find((c) => c.active);
     if (first) {

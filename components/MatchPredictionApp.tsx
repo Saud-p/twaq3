@@ -23,6 +23,7 @@ export default function MatchPredictionApp() {
   const [leaderboard,  setLb]       = useState<StoredUser[]>([]);
   const [saveModal, setSaveModal]   = useState<{ count: number; points: number } | null>(null);
   const [setupLoading, setSetup]    = useState(true);
+  const [serverTs,     setServerTs] = useState<number | null>(null);
 
   const refreshLb = () => setLb(getLeaderboard());
 
@@ -45,6 +46,17 @@ export default function MatchPredictionApp() {
 
   const loadPreds = (uid: string, comp: Competition) =>
     setPBC((prev) => ({ ...prev, [comp.id]: getUserPredictions(uid, comp.id) }));
+
+  // جلب وقت الخادم — يتجدد كل دقيقة
+  useEffect(() => {
+    const fetchTs = () =>
+      fetch('/api/time').then((r) => r.json())
+        .then((d) => { if (typeof d.ts === 'number') setServerTs(d.ts); })
+        .catch(() => {});
+    fetchTs();
+    const iv = setInterval(fetchTs, 60_000);
+    return () => clearInterval(iv);
+  }, []);
 
   useEffect(() => {
     refreshLb();
@@ -132,6 +144,33 @@ export default function MatchPredictionApp() {
     refreshLb();
     setSaveModal({ count: preds.length, points: updated?.points ?? user.points });
   }, [user, selectedId, predsByComp]);
+
+  // تحليل وقت بداية المباراة إلى timestamp UTC
+  function parseMatchStartTs(match: Match): number | null {
+    // مباريات API: date="2026-06-11"، time="19:00:00+00:00"
+    if (match.time && /^\d{4}-\d{2}-\d{2}$/.test(match.date.trim())) {
+      const t = match.time.replace(/\+.*$/, '').trim();
+      const dt = new Date(`${match.date}T${t}Z`);
+      return isNaN(dt.getTime()) ? null : dt.getTime();
+    }
+    // مباريات يدوية: "11/06/26 - 10:00 م" (توقيت السعودية UTC+3)
+    const m = match.date.match(/(\d{1,2})\/(\d{2})\/(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*([مص])/);
+    if (m) {
+      let h = parseInt(m[4]);
+      const min = parseInt(m[5]);
+      if (m[6] === 'م' && h !== 12) h += 12;
+      if (m[6] === 'ص' && h === 12) h = 0;
+      return Date.UTC(2000 + parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]), h - 3, min);
+    }
+    return null;
+  }
+
+  function matchStarted(match: Match): boolean {
+    if (serverTs === null) return false; // لم يُجلب وقت الخادم بعد — الأكثر أماناً: إخفاء
+    const startTs = parseMatchStartTs(match);
+    if (startTs === null) return true;   // لا وقت محدد — اعتبرها بدأت
+    return serverTs >= startTs;
+  }
 
   const userRank        = user ? leaderboard.findIndex((u) => u.id === user.id) + 1 : 0;
   const currentPreds    = predsByComp[selectedId]   ?? [];
@@ -229,7 +268,8 @@ export default function MatchPredictionApp() {
           <h2 className="section-title"><span className="icon">📋</span>توقعات الأعضاء</h2>
           <div className="divider" />
           {currentMatches.map((match) => {
-            const result = currentResults.find((r) => r.matchId === match.id);
+            const result  = currentResults.find((r) => r.matchId === match.id);
+            const started = matchStarted(match);
             return (
               <div key={match.id} className="mp-match-block">
                 <div className="mp-match-header">
@@ -241,26 +281,34 @@ export default function MatchPredictionApp() {
                       {result.result === 'home' ? match.home : result.result === 'draw' ? 'تعادل' : match.away}
                     </span>
                   )}
+                  {!started && <span className="mp-locked-badge">🔒 لم تبدأ</span>}
                 </div>
                 {match.date && <div className="mp-date">{match.date}</div>}
-                <div className="mp-members">
-                  {leaderboard.map((member) => {
-                    const pred = (currentMemberPreds[member.id] ?? []).find((p) => p.matchId === match.id);
-                    const correct = result && pred ? pred.prediction === result.result : null;
-                    return (
-                      <div key={member.id} className="mp-member-row">
-                        <span className="mp-member-name">{member.name}</span>
-                        {pred ? (
-                          <span className={`mp-pred-badge${correct === true ? ' correct' : correct === false ? ' wrong' : ''}`}>
-                            {predNum(pred.prediction)}
-                          </span>
-                        ) : (
-                          <span className="mp-pred-badge empty">—</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+
+                {started ? (
+                  <div className="mp-members">
+                    {leaderboard.map((member) => {
+                      const pred = (currentMemberPreds[member.id] ?? []).find((p) => p.matchId === match.id);
+                      const correct = result && pred ? pred.prediction === result.result : null;
+                      return (
+                        <div key={member.id} className="mp-member-row">
+                          <span className="mp-member-name">{member.name}</span>
+                          {pred ? (
+                            <span className={`mp-pred-badge${correct === true ? ' correct' : correct === false ? ' wrong' : ''}`}>
+                              {predNum(pred.prediction)}
+                            </span>
+                          ) : (
+                            <span className="mp-pred-badge empty">—</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mp-locked-msg">
+                    تُكشف توقعات الأعضاء بعد بداية المباراة
+                  </div>
+                )}
               </div>
             );
           })}
