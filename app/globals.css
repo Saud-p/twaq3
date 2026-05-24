@@ -159,16 +159,11 @@ body {
 
 .user-info { flex: 1; }
 
-.user-phone {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.user-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-top: 1px;
+.user-greeting {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.01em;
 }
 
 .user-points {

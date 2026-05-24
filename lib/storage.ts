@@ -37,10 +37,13 @@ export function saveSession(userId: string) {
 
 export function loadSession(): StoredUser | null {
   const session = load<Session | null>(SESSION_KEY, null);
-  if (!session || Date.now() > session.expiresAt) { clearSession(); return null; }
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) { clearSession(); return null; }
   const users = getAllUsers();
   const user  = users.find((u) => u.id === session.userId);
-  if (!user || user.status !== 'approved') { clearSession(); return null; }
+  if (!user) return null;
+  if (user.status === 'rejected') { clearSession(); return null; }
+  if (user.status !== 'approved') return null; // pending — keep session, just don't log in yet
   return user;
 }
 
@@ -53,7 +56,10 @@ function load<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; }
   catch { return fallback; }
 }
-function save(key: string, val: unknown) { localStorage.setItem(key, JSON.stringify(val)); }
+function save(key: string, val: unknown) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(val));
+}
 
 /* ── Users ── */
 

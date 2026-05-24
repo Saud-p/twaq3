@@ -38,7 +38,6 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
     setUser(authedUser);
     setPreds(getUserPredictions(authedUser.id));
     refreshAll();
-    setStatus(`أهلاً ${authedUser.name} 👋`);
   };
 
   const handlePredict = (matchId: string, prediction: MatchOutcome) => {
@@ -89,8 +88,7 @@ export default function MatchPredictionApp({ initialMatches }: { initialMatches:
             {userRank || '-'}
           </div>
           <div className="user-info">
-            <div className="user-phone">{user.name}</div>
-            <div className="user-label">{user.phone}</div>
+            <div className="user-greeting">أهلاً، {user.name}</div>
           </div>
           <div className="user-points">
             <div className="user-points-val">{user.points}</div>
