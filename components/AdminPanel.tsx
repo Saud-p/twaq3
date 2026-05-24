@@ -151,14 +151,20 @@ export default function AdminPanel() {
     refreshComps();
   };
 
-  const handleRemoveComp = (id: string) => {
-    removeCompetition(id);
+  const handleRemoveComp = (comp: Competition) => {
+    const enteredPass = window.prompt(
+      `⚠️ تحذير: سيتم حذف بطولة "${comp.name}" نهائياً.\n\nأدخل كلمة المرور للتأكيد:`
+    );
+    if (enteredPass === null) return; // ألغى
+    if (enteredPass !== ADMIN_PASS) { flash('كلمة المرور غير صحيحة — لم يتم الحذف'); return; }
+    removeCompetition(comp.id);
     const comps = refreshComps();
-    if (selComp === id) {
+    if (selComp === comp.id) {
       const first = comps.find((c) => c.active);
       if (first) { setSelComp(first.id); loadMatchesFor(first.id); refreshResults(first.id); }
       else { setSelComp(''); setMatches([]); setResults([]); }
     }
+    flash(`✓ تم حذف بطولة "${comp.name}"`);
   };
 
   const handleGenerateShare = () => {
@@ -340,7 +346,7 @@ export default function AdminPanel() {
                   </button>
                   <button
                     className="btn-reject"
-                    onClick={() => handleRemoveComp(c.id)}
+                    onClick={() => handleRemoveComp(c)}
                     style={{ fontSize: '0.75rem', padding: '5px 10px' }}
                   >
                     حذف
