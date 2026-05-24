@@ -850,6 +850,70 @@ body {
   outline: none;
 }
 
+/* ── Competition Tabs ── */
+.comp-tabs-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 14px 10px;
+  scrollbar-width: none;
+}
+.comp-tabs-bar::-webkit-scrollbar { display: none; }
+
+.comp-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.comp-tab.active {
+  background: var(--green-glow);
+  border-color: var(--green);
+  color: var(--green);
+}
+.comp-tab-badge {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ── Admin Competition Management ── */
+.comp-lookup-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--green-glow);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+
+.comp-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+.comp-manage-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
